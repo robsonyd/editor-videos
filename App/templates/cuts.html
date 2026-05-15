@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projeto {{ project_id }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/progress.css') }}">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1100px;
+      margin: 40px auto;
+      padding: 100px 20px 0;
+      background: #f7f7f7;
+    }
+    .box {
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+    }
+    h1, h2, h3 { margin-top: 0; }
+    a { color: #1f6feb; text-decoration: none; }
+    button {
+      background: #1f6feb;
+      color: white;
+      border: none;
+      padding: 12px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+    button:hover { background: #1558b0; }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      font-family: monospace;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    input[type="time"],
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      font-size: 14px;
+    }
+    input[type="time"]:focus,
+    input[type="text"]:focus,
+    input[type="number"]:focus {
+      outline: none;
+      border-color: #1f6feb;
+      box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.15);
+    }
+    .hint { color: #666; font-size: 14px; }
+    .actions-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .actions-row form { margin: 0; }
+    .actions-row button { margin-top: 0; }
+    .cut-row {
+      display: grid;
+      grid-template-columns: 180px 180px 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+      align-items: end;
+    }
+    .time-field, .name-field, .margin-field {
+      display: flex;
+      flex-direction: column;
+    }
+    .time-field label, .name-field label, .margin-field label {
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+    .time-field small, .name-field small, .margin-field small {
+      margin-top: 4px;
+      color: #666;
+      font-size: 12px;
+    }
+    .section-divider {
+      height: 1px;
+      background: #ececec;
+      margin: 20px 0;
+    }
+    .ai-card {
+      border: 1px solid #e3e3e3;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+      background: #fafafa;
+    }
+    .ai-card h3 { margin-bottom: 10px; }
+    .ai-meta { margin-bottom: 8px; line-height: 1.6; }
+    .ai-reason { margin-top: 10px; color: #333; }
+    .margin-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .cut-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .cut-item {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .cut-item:last-child { border-bottom: none; }
+    .cut-item-main {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .cut-item-main span {
+      color: #4b5563;
+      font-size: 14px;
+    }
+    .cut-item-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    .status-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+    }
+    .status-tag.is-processed {
+      color: #166534;
+      background: #dcfce7;
+      border: 1px solid #86efac;
+    }
+    .status-tag.is-pending {
+      color: #92400e;
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+    }
+    .status-tag.is-error {
+      color: #991b1b;
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+    }
+    .delete-form {
+      margin: 0;
+      display: inline-flex;
+    }
+    .delete-button {
+      width: 42px;
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      color: #111827;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      margin-top: 0;
+      padding: 0;
+    }
+    .delete-button:hover {
+      background: #fff7f7;
+      box-shadow: 0 6px 14px rgba(220,38,38,0.14);
+      transform: translateY(-1px);
+    }
+
+    .magic-button {
+      position: relative;
+      overflow: visible;
+      padding: 14px 22px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: linear-gradient(120deg, #1f2937, #4f46e5, #0891b2, #7c3aed, #1f2937);
+      background-size: 240% 240%;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.08) inset,
+        0 10px 24px rgba(79,70,229,0.28),
+        0 0 22px rgba(56,189,248,0.18);
+      animation: magicGradient 5s ease infinite;
+    }
+    .magic-button::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.42), transparent);
+      transform: translateX(-140%);
+      animation: magicShine 2.6s ease-in-out infinite;
+    }
+    .magic-button:hover {
+      transform: translateY(-2px) scale(1.03);
+      filter: saturate(1.3) brightness(1.08);
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.22) inset,
+        0 0 24px rgba(124,58,237,0.52),
+        0 0 46px rgba(37,99,235,0.44),
+        0 0 72px rgba(6,182,212,0.30);
+    }
+    .magic-button .magic-text {
+      position: relative;
+      z-index: 3;
+      text-shadow: 0 0 8px rgba(255,255,255,0.35);
+    }
+    .magic-button .magic-particle {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      pointer-events: none;
+      opacity: 0;
+      z-index: 2;
+      transform: translate(-50%, -50%) scale(0.2);
+      box-shadow: 0 0 10px currentColor, 0 0 18px currentColor;
+    }
+    .magic-button .magic-particle.star {
+      width: 14px;
+      height: 14px;
+      background: #fde68a;
+      clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+    }
+    .magic-button .magic-particle.dot-gold { background: #facc15; color: #facc15; }
+    .magic-button .magic-particle.dot-cyan { background: #22d3ee; color: #22d3ee; }
+    .magic-button .magic-particle.dot-pink { background: #f472b6; color: #f472b6; }
+    .magic-button .magic-particle.dot-lime { background: #a3e635; color: #a3e635; }
+    .magic-button:hover .magic-particle {
+      opacity: 1;
+      animation: magicBurst 1.4s ease-out infinite;
+    }
+    .magic-button:hover .magic-particle.p1 { --tx: -120px; --ty: -62px; animation-delay: 0s; }
+    .magic-button:hover .magic-particle.p2 { --tx: -86px; --ty: 48px; animation-delay: 0.12s; }
+    .magic-button:hover .magic-particle.p3 { --tx: 0px; --ty: -88px; animation-delay: 0.22s; }
+    .magic-button:hover .magic-particle.p4 { --tx: 94px; --ty: -42px; animation-delay: 0.08s; }
+    .magic-button:hover .magic-particle.p5 { --tx: 120px; --ty: 54px; animation-delay: 0.18s; }
+    .magic-button:hover .magic-particle.p6 { --tx: -18px; --ty: 86px; animation-delay: 0.28s; }
+    .magic-button:hover .magic-particle.p7 { --tx: 62px; --ty: 84px; animation-delay: 0.05s; }
+    .magic-button:hover .magic-particle.p8 { --tx: -58px; --ty: -94px; animation-delay: 0.16s; }
+
+    .magic-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.25);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10050;
+      backdrop-filter: blur(2px);
+    }
+    .magic-overlay.is-visible {
+      display: flex;
+    }
+    .magic-overlay-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+    }
+    .magic-overlay img {
+      width: 35vw;
+      max-width: 520px;
+      min-width: 260px;
+      height: auto;
+      border-radius: 18px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+    .magic-overlay-caption {
+      color: #fff;
+      font-weight: 700;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.4);
+      letter-spacing: 0.3px;
+    }
+
+    @keyframes magicGradient {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    @keyframes magicShine {
+      0% { transform: translateX(-140%); opacity: 0; }
+      20% { opacity: 1; }
+      60% { opacity: 1; }
+      100% { transform: translateX(140%); opacity: 0; }
+    }
+    @keyframes magicBurst {
+      0% { transform: translate(-50%, -50%) scale(0.2) rotate(0deg); opacity: 0; }
+      15% { opacity: 1; }
+      75% { opacity: 1; }
+      100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(1.15) rotate(160deg); opacity: 0; }
+    }
+
+    @media (max-width: 860px) {
+      .cut-row { grid-template-columns: 1fr; }
+      .margin-grid { grid-template-columns: 1fr; }
+      .cut-item { grid-template-columns: auto 1fr; }
+      .cut-item-actions { justify-content: flex-start; grid-column: 2; }
+      .actions-row { flex-direction: column; align-items: stretch; }
+      .actions-row form, .actions-row button { width: 100%; }
+      .magic-overlay img { width: 75vw; }
+    }
+  </style>
+</head>
+<body>
+  {% include 'partials/progress_bar.html' %}
+
+  <div class="box">
+    <h1>Projeto {{ project_id }}</h1>
+    <p><strong>Arquivo:</strong> {{ metadata.get("video_name", "") }}</p>
+    <p><strong>Status:</strong> {{ metadata.get("status", "") }}</p>
+    <p><strong>Duração:</strong> {{ metadata.get("duration", "") }} segundos</p>
+    <p><a href="{{ url_for('home') }}">← Voltar para a página inicial</a></p>
+  </div>
+
+  <div class="box">
+    <h2>1. Vamos começar</h2>
+    <div class="actions-row">
+      <form action="{{ url_for('generate_transcription', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="generate_transcription" data-project-id="{{ project_id }}" data-keep-scroll="true">
+        <input type="hidden" name="scroll_y" value="0">
+        <button type="submit">Gerar Transcrição</button>
+      </form>
+
+      <form action="{{ url_for('reset_project', project_id=project_id) }}" method="POST" data-keep-scroll="true">
+        <input type="hidden" name="scroll_y" value="0">
+        <button type="submit">Limpar</button>
+      </form>
+
+      <button type="button" class="magic-button" id="magic-button">
+        <span class="magic-text">Botão Mágico</span>
+        <span class="magic-particle dot-gold p1"></span>
+        <span class="magic-particle dot-cyan p2"></span>
+        <span class="magic-particle star p3"></span>
+        <span class="magic-particle dot-pink p4"></span>
+        <span class="magic-particle star p5"></span>
+        <span class="magic-particle dot-lime p6"></span>
+        <span class="magic-particle dot-gold p7"></span>
+        <span class="magic-particle dot-cyan p8"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>2. Transcrição</h2>
+    {% if transcript_text %}
+      <h3>Texto corrido</h3>
+      <textarea readonly>{{ transcript_text }}</textarea>
+      {% if transcript_srt_text %}
+        <h3 style="margin-top: 20px;">Transcrição com marcadores de tempo</h3>
+        <textarea readonly>{{ transcript_srt_text }}</textarea>
+      {% endif %}
+    {% else %}
+      <p>Nenhuma transcrição gerada ainda.</p>
+    {% endif %}
+  </div>
+
+  <div class="box">
+    <h2>3. Sugerir cortes com IA</h2>
+    {% if transcript_srt_text %}
+      <form action="{{ url_for('suggest_cuts', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="suggest_cuts" data-project-id="{{ project_id }}" data-keep-scroll="true">
+        <input type="hidden" name="scroll_y" value="0">
+        <button type="submit">Sugerir cortes com IA</button>
+      </form>
+      <p class="hint">A IA vai sugerir pares de <strong>conteúdo + gancho</strong> com base na transcrição com timestamps.</p>
+    {% else %}
+      <button disabled>Sugerir cortes com IA</button>
+      <p class="hint">Gere a transcrição com marcadores de tempo primeiro.</p>
+    {% endif %}
+  </div>
+
+  <div class="box" id="section-4">
+    <h2>4. Sugestões da IA</h2>
+    {% if ai_suggestions and ai_suggestions.get("cuts") %}
+      <form action="{{ url_for('use_ai_cuts', project_id=project_id) }}" method="POST" data-keep-scroll="true">
+        <input type="hidden" name="scroll_y" value="0">
+        <div class="margin-grid">
+          <div class="margin-field">
+            <label for="initial_margin_seconds"><strong>Margem de segurança (segundos): Inicial</strong></label>
+            <input type="number" id="initial_margin_seconds" name="initial_margin_seconds" min="0" step="0.1" value="0">
+            <small>Subtrai esse valor do início de todos os cortes selecionados.</small>
+          </div>
+          <div class="margin-field">
+            <label for="final_margin_seconds"><strong>Margem de segurança (segundos): Final</strong></label>
+            <input type="number" id="final_margin_seconds" name="final_margin_seconds" min="0" step="0.1" value="1">
+            <small>Adiciona esse valor ao final de todos os cortes selecionados.</small>
+          </div>
+        </div>
+
+        {% for item in ai_suggestions.get("cuts", []) %}
+          <div class="ai-card">
+            <label style="display:flex; gap:10px; align-items:flex-start;">
+              <input type="checkbox" name="selected_indexes" value="{{ loop.index0 }}" style="margin-top:4px;">
+              <div style="flex:1;">
+                <h3>{{ item.title }}</h3>
+                <div class="ai-meta"><strong>Conteúdo:</strong> {{ item.content_start }} até {{ item.content_end }}</div>
+                <div class="ai-meta"><strong>Gancho:</strong> {{ item.hook_title }}<br>{{ item.hook_start }} até {{ item.hook_end }}</div>
+                <div class="ai-reason"><strong>Motivo:</strong> {{ item.reason }}</div>
+              </div>
+            </label>
+          </div>
+        {% endfor %}
+
+        <button type="submit">Adicionar sugestões selecionadas</button>
+      </form>
+    {% else %}
+      <p>Nenhuma sugestão da IA ainda.</p>
+    {% endif %}
+  </div>
+
+  <div class="box" id="section-5">
+    <h2>5. Definir cortes manualmente</h2>
+    {% if metadata.get("transcription_generated") == "yes" %}
+      <form id="define-cuts-form" action="{{ url_for('save_cuts', project_id=project_id) }}" method="POST" data-keep-scroll="true">
+        <input type="hidden" name="scroll_y" value="0">
+
+        <h3>Conteúdo principal</h3>
+        {% if selected_ai_cuts %}
+          {% for item in selected_ai_cuts %}
+            <div class="cut-row">
+              <div class="time-field">
+                <label>Início</label>
+                <input type="time" step="1" name="start[]" value="{{ item.content_start }}">
+                <small>Formato: hh:mm:ss</small>
+              </div>
+              <div class="time-field">
+                <label>Fim</label>
+                <input type="time" step="1" name="end[]" value="{{ item.content_end }}">
+                <small>Formato: hh:mm:ss</small>
+              </div>
+              <div class="name-field">
+                <label>Nome do corte</label>
+                <input type="text" name="name[]" placeholder="Ex: Conteúdo 01 - Nome do corte" value="{{ 'Conteúdo %02d - %s' % (next_cut_number + loop.index0, item.title) }}">
+                <small>Conteúdo principal sugerido pela IA</small>
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="cut-row">
+            <div class="time-field">
+              <label>Início</label>
+              <input type="time" step="1" name="start[]">
+              <small>Formato: hh:mm:ss</small>
+            </div>
+            <div class="time-field">
+              <label>Fim</label>
+              <input type="time" step="1" name="end[]">
+              <small>Formato: hh:mm:ss</small>
+            </div>
+            <div class="name-field">
+              <label>Nome do corte</label>
+              <input type="text" name="name[]" placeholder="Ex: Conteúdo 01 - Nome do corte">
+              <small>Conteúdo principal</small>
+            </div>
+          </div>
+        {% endif %}
+
+        <h3>Gancho</h3>
+        {% if selected_ai_cuts %}
+          {% for item in selected_ai_cuts %}
+            <div class="cut-row">
+              <div class="time-field">
+                <label>Início</label>
+                <input type="time" step="1" name="start[]" value="{{ item.hook_start }}">
+                <small>Formato: hh:mm:ss</small>
+              </div>
+              <div class="time-field">
+                <label>Fim</label>
+                <input type="time" step="1" name="end[]" value="{{ item.hook_end }}">
+                <small>Formato: hh:mm:ss</small>
+              </div>
+              <div class="name-field">
+                <label>Nome do corte</label>
+                <input type="text" name="name[]" placeholder="Ex: Gancho 01 - Nome do gancho" value="{{ 'Gancho %02d - %s' % (next_cut_number + loop.index0, item.hook_title) }}">
+                <small>Gancho sugerido pela IA</small>
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="cut-row">
+            <div class="time-field">
+              <label>Início</label>
+              <input type="time" step="1" name="start[]">
+              <small>Formato: hh:mm:ss</small>
+            </div>
+            <div class="time-field">
+              <label>Fim</label>
+              <input type="time" step="1" name="end[]">
+              <small>Formato: hh:mm:ss</small>
+            </div>
+            <div class="name-field">
+              <label>Nome do corte</label>
+              <input type="text" name="name[]" placeholder="Ex: Gancho 01 - Nome do gancho">
+              <small>Gancho</small>
+            </div>
+          </div>
+        {% endif %}
+
+        <div class="section-divider"></div>
+        <h3>Linhas extras opcionais</h3>
+        {% for i in range(3) %}
+          <div class="cut-row">
+            <div class="time-field">
+              <label>Início</label>
+              <input type="time" step="1" name="start[]">
+              <small>Formato: hh:mm:ss</small>
+            </div>
+            <div class="time-field">
+              <label>Fim</label>
+              <input type="time" step="1" name="end[]">
+              <small>Formato: hh:mm:ss</small>
+            </div>
+            <div class="name-field">
+              <label>Nome do corte</label>
+              <input type="text" name="name[]" placeholder="Ex: corte_extra_{{ i + 1 }}">
+              <small>Opcional</small>
+            </div>
+          </div>
+        {% endfor %}
+
+        <button type="submit">Definir cortes</button>
+      </form>
+    {% else %}
+      <button disabled>Definir cortes</button>
+      <p class="hint">Gere a transcrição primeiro.</p>
+    {% endif %}
+  </div>
+
+  <div class="box" id="section-6">
+    <h2>6. Cortes definidos</h2>
+    {% if cuts %}
+      <ul class="cut-list">
+        {% for cut in cuts %}
+          <li class="cut-item">
+            <form method="POST" action="{{ url_for('delete_cut', project_id=project_id, cut_index=loop.index0) }}" class="delete-form" data-keep-scroll="true">
+              <input type="hidden" name="scroll_y" value="0">
+              <button type="submit" class="delete-button" title="Excluir">🗑️</button>
+            </form>
+            <div class="cut-item-main">
+              <strong>{{ cut.name }}</strong>
+              <span>{{ cut.start }} até {{ cut.end }}</span>
+            </div>
+            <div class="cut-item-actions">
+              <span class="status-tag {% if cut.status == 'processed' %}is-processed{% elif cut.status == 'error' %}is-error{% else %}is-pending{% endif %}">
+                {% if cut.status == 'processed' %}Processado{% elif cut.status == 'error' %}Erro{% else %}Pendente{% endif %}
+              </span>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>Nenhum corte definido ainda.</p>
+    {% endif %}
+  </div>
+
+  <div class="box" id="section-7">
+    <h2>7. Processar cortes</h2>
+    {% if metadata.get("cuts_defined") == "yes" %}
+      <form action="{{ url_for('process_cuts', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="process_cuts" data-project-id="{{ project_id }}" data-keep-scroll="true">
+        <input type="hidden" name="scroll_y" value="0">
+        <button type="submit">Processar cortes</button>
+      </form>
+    {% else %}
+      <button disabled>Processar cortes</button>
+      <p class="hint">Defina os cortes primeiro.</p>
+    {% endif %}
+  </div>
+
+  <div class="box" id="section-8">
+    <h2>8. Arquivos processados</h2>
+    {% if processed_files %}
+      <ul>
+        {% for file in processed_files %}
+          <li>{{ file }}</li>
+        {% endfor %}
+      </ul>
+      <p class="hint">Os arquivos estão na pasta Processados da sua área de trabalho.</p>
+    {% else %}
+      <p>Nenhum arquivo processado ainda.</p>
+    {% endif %}
+  </div>
+
+  <div class="magic-overlay" id="magic-overlay" aria-hidden="true">
+    <div class="magic-overlay-inner">
+      <img id="magic-overlay-gif" src="" alt="Processamento mágico em andamento">
+      <div class="magic-overlay-caption">A mágica está acontecendo...</div>
+    </div>
+  </div>
+
+  <script>
+    // Mantém a rolagem e executa o Botão Mágico com AJAX seguro.
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const scrollFromUrl = params.get('scroll_y');
+      const scrollFromSession = sessionStorage.getItem('cuts_scroll_y');
+      const target = scrollFromUrl !== null ? Number(scrollFromUrl) : Number(scrollFromSession || 0);
+
+      if (!Number.isNaN(target) && target > 0) {
+        window.requestAnimationFrame(() => window.scrollTo({ top: target, behavior: 'auto' }));
+      }
+
+      document.querySelectorAll('form[data-keep-scroll="true"]').forEach((form) => {
+        form.addEventListener('submit', () => {
+          const currentY = String(window.scrollY || window.pageYOffset || 0);
+          sessionStorage.setItem('cuts_scroll_y', currentY);
+          const input = form.querySelector('input[name="scroll_y"]');
+          if (input) input.value = currentY;
+        });
+      });
+
+      const magicButton = document.getElementById('magic-button');
+      const magicOverlay = document.getElementById('magic-overlay');
+      const magicOverlayGif = document.getElementById('magic-overlay-gif');
+      const MAGIC_GIFS = [
+        'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExZ2dqZTBpdjIybml4ajZ4c2N5aWI4MGl5bG4yeXpxc2piM21uNzR2eSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/vy6rpmMJQDZczEHanJ/giphy.gif',
+        'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExN2czNDJxZHh2N3B2aHU3eWNvNDM1dWxpNzl6OGxhbnNvOWNpajJybyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5mwdfypLZ8Vu0nZ0rq/giphy.gif',
+        'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExdnFwdm41N203c2ZqcDFjbnBieGc2dHhnaHdvdDA0Z3RkNW8wemZzciZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/7Xov9qZ44Mq0qkCN9Q/giphy.gif',
+        'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExOTB5ejZlcHE2czEyNzN0cmFicnZqeTVtazVoaWduZ3B3aHU4ZGF0bCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/9r75ILTJtiDACKOKoY/giphy.gif',
+        'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExbGJuZHNxMTY5ZDc0NXZpcGJycWx2bmRjbTQyOHY2eWVqaHI5cGRvOCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/tkApIfibjeWt1ufWwj/giphy.gif',
+        'https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExbDhrdmdhZnE3YWhheTRqZ2hkNXg0cDNwMmF1cHMyYWR2MTMzMDR1NCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/VIjf1GqRSbf0OsNG0H/giphy.gif'
+      ];
+
+      function showMagicOverlay() {
+        if (!magicOverlay || !magicOverlayGif) return;
+        magicOverlayGif.src = MAGIC_GIFS[Math.floor(Math.random() * MAGIC_GIFS.length)];
+        magicOverlay.classList.add('is-visible');
+        magicOverlay.setAttribute('aria-hidden', 'false');
+      }
+
+      function hideMagicOverlay() {
+        if (!magicOverlay) return;
+        magicOverlay.classList.remove('is-visible');
+        magicOverlay.setAttribute('aria-hidden', 'true');
+      }
+
+      function setProgressState(jobType, state, progress, message, detail) {
+        const panel = document.getElementById('progress-panel');
+        const title = document.getElementById('progress-title');
+        const percent = document.getElementById('progress-percent');
+        const fill = document.getElementById('progress-fill');
+        const progressMessage = document.getElementById('progress-message');
+        const progressDetail = document.getElementById('progress-detail');
+        const titles = {
+          generate_transcription: 'Gerar transcrição',
+          suggest_cuts: 'Sugerir cortes com IA',
+          process_cuts: 'Processar cortes'
+        };
+
+        if (!panel) return;
+        panel.hidden = false;
+        panel.classList.remove('is-running', 'is-success', 'is-error');
+        panel.classList.add(state === 'success' ? 'is-success' : state === 'error' ? 'is-error' : 'is-running');
+
+        if (title) title.textContent = titles[jobType] || 'Processando';
+        if (percent) percent.textContent = `${progress}%`;
+        if (fill) fill.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+        if (progressMessage) progressMessage.textContent = message || 'Processando...';
+        if (progressDetail) progressDetail.textContent = detail || '';
+      }
+
+      async function postForm(url, body = {}) {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+          },
+          body: new URLSearchParams(body)
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          const raw = await response.text();
+          throw new Error(`Resposta inesperada do servidor: ${raw.slice(0, 200)}`);
+        }
+
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          throw new Error(data.message || data.detail || 'Falha na operação.');
+        }
+        return data;
+      }
+
+      async function pollJob(projectId, jobType) {
+        while (true) {
+          const response = await fetch(`/job_status/${projectId}/${jobType}`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+
+          const contentType = response.headers.get('content-type') || '';
+          if (!contentType.includes('application/json')) {
+            const raw = await response.text();
+            throw new Error(`Status inválido para ${jobType}: ${raw.slice(0, 200)}`);
+          }
+
+          const data = await response.json();
+          setProgressState(jobType, data.state || 'running', Number(data.progress || 0), data.message || '', data.detail || '');
+
+          if (data.state === 'success') return data;
+          if (data.state === 'error') throw new Error(data.detail || data.message || `Erro em ${jobType}`);
+          await new Promise(resolve => setTimeout(resolve, 1200));
+        }
+      }
+
+      async function runMagicSequence() {
+        if (!magicButton) return;
+
+        const projectId = {{ project_id|tojson }};
+        const initialMarginInput = document.getElementById('initial_margin_seconds');
+        const finalMarginInput = document.getElementById('final_margin_seconds');
+        const initialMargin = initialMarginInput ? (initialMarginInput.value || '0') : '0';
+        const finalMargin = finalMarginInput ? (finalMarginInput.value || '1') : '1';
+
+        sessionStorage.setItem('cuts_scroll_y', String(window.scrollY || window.pageYOffset || 0));
+        showMagicOverlay();
+        setProgressState('generate_transcription', 'running', 1, 'Botão mágico iniciado...', 'Executando a sequência completa automaticamente.');
+        magicButton.disabled = true;
+
+        try {
+          await postForm(`/generate_transcription/${projectId}`);
+          await pollJob(projectId, 'generate_transcription');
+
+          setProgressState('suggest_cuts', 'running', 5, 'Solicitando sugestões da IA...', 'Selecionando automaticamente todos os cortes sugeridos.');
+          await postForm(`/suggest_cuts/${projectId}`);
+          await pollJob(projectId, 'suggest_cuts');
+
+          setProgressState('suggest_cuts', 'running', 88, 'Aplicando margens e selecionando tudo...', 'Preparando conteúdo e ganchos automaticamente.');
+          await postForm(`/use_ai_cuts/${projectId}`, {
+            select_all: '1',
+            initial_margin_seconds: initialMargin,
+            final_margin_seconds: finalMargin,
+            replace_selected: '1'
+          });
+
+          setProgressState('process_cuts', 'running', 8, 'Convertendo sugestões em cortes...', 'Criando a nova remessa automaticamente.');
+          await postForm(`/append_selected_ai_cuts/${projectId}`);
+
+          await postForm(`/process_cuts/${projectId}`);
+          await pollJob(projectId, 'process_cuts');
+
+          setProgressState('process_cuts', 'success', 100, 'Mágica concluída', 'Todos os processos foram executados automaticamente.');
+          setTimeout(() => window.location.reload(), 900);
+        } catch (error) {
+          setProgressState('process_cuts', 'error', 100, 'A mágica encontrou um problema', String(error.message || error));
+          hideMagicOverlay();
+          magicButton.disabled = false;
+        }
+      }
+
+      if (magicButton) {
+        magicButton.addEventListener('click', () => {
+          runMagicSequence();
+        });
+      }
+    })();
+  </script>
+
+  <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
+</body>
+</html>

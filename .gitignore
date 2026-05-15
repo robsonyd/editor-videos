@@ -1,0 +1,49 @@
+# Sistema / Mac
+.DS_Store
+*/.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+ENV/
+
+# Ambiente / segredos
+.env
+*.env
+
+# Arquivos locais do app
+Bruto/*
+Processados/*
+Projetos/*
+Transcricoes/*
+
+# Mantém as pastas no Git sem os conteúdos gerados
+!Bruto/.gitkeep
+!Processados/.gitkeep
+!Projetos/.gitkeep
+!Transcricoes/.gitkeep
+
+# Modelos locais pesados
+Modelos/*
+!Modelos/.gitkeep
+
+# iCloud
+*.icloud
+
+# Whisper build e repositório interno
+whisper.cpp/build/
+whisper.cpp/.git/
+
+# Arquivos temporários
+*.log
+*.tmp
+mapa_arquivos_editor.txt
+
+# Dependência externa local
+whisper.cpp/
