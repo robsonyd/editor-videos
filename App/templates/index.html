@@ -3,43 +3,309 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cortes IA MVP</title>
+  <title>Editor de Vídeos</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 1000px; margin: 40px auto; padding: 0 20px; background: #f7f7f7; }
-    .box { background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); margin-bottom: 24px; }
-    h1, h2 { margin-top: 0; }
-    button { background: #1f6feb; color: white; border: none; padding: 12px 18px; border-radius: 8px; cursor: pointer; }
-    button:hover { background: #1558b0; }
-    input[type="file"] { margin: 12px 0; }
-    ul { padding-left: 20px; }
-    a { color: #1f6feb; text-decoration: none; }
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #f7f7f7;
+      color: #222;
+    }
+
+    .box {
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+    }
+
+    h1, h2 {
+      margin-top: 0;
+    }
+
+    h1 {
+      font-size: 34px;
+      margin-bottom: 8px;
+    }
+
+    h2 {
+      font-size: 22px;
+      margin-bottom: 16px;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 14px;
+      margin-bottom: 6px;
+    }
+
+    input[type="file"],
+    input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      font-size: 14px;
+    }
+
+    button {
+      background: #1f6feb;
+      color: white;
+      border: none;
+      padding: 12px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 14px;
+    }
+
+    button:hover {
+      background: #1558b0;
+    }
+
+    .secondary-button {
+      background: #444;
+    }
+
+    .secondary-button:hover {
+      background: #222;
+    }
+
+    .hint {
+      color: #666;
+      font-size: 14px;
+      line-height: 1.5;
+      margin-top: 8px;
+    }
+
+    .small-hint {
+      color: #777;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    .status-ok {
+      color: #137333;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .destination {
+      background: #f2f4f7;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #333;
+      word-break: break-all;
+      margin-top: 8px;
+    }
+
+    .radio-group {
+      display: grid;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .radio-card {
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 12px;
+      background: #fafafa;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .radio-card input {
+      margin-top: 3px;
+    }
+
+    .radio-title {
+      font-weight: bold;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .radio-description {
+      color: #666;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    ul {
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    a {
+      color: #1f6feb;
+      text-decoration: none;
+    }
+  
+    .project-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .project-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 12px;
+      background: #fafafa;
+      border: 1px solid #e5e5e5;
+      border-radius: 10px;
+    }
+
+    .project-info {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      line-height: 1.4;
+    }
+
+    .project-number {
+      font-weight: bold;
+      color: #333;
+      min-width: 24px;
+    }
+
+    .project-separator {
+      color: #aaa;
+      margin-right: 4px;
+    }
+
+    .project-title {
+      font-weight: bold;
+    }
+
+    .project-video,
+    .project-status {
+      color: #555;
+      font-size: 14px;
+    }
+
+    .delete-button {
+      background: #f3b5b5;
+      color: #5c1111;
+      padding: 8px 12px;
+      font-size: 12px;
+      margin-top: 0;
+      white-space: nowrap;
+    }
+
+    .delete-button:hover {
+      background: #e89a9a;
+    }
+
   </style>
 </head>
 <body>
+
   <div class="box">
-    <h1>Cortes IA MVP</h1>
-    <p>Selecione um vídeo bruto do seu computador para iniciar.</p>
+    <h1>Editor de Vídeos</h1>
+
+    {% if not storage_status.exists %}
+      <h2>Vamos iniciar criando sua pasta de armazenamento</h2>
+      <p class="hint">
+        Os arquivos pesados do sistema serão salvos fora da pasta do código-fonte.
+        Por padrão, criaremos uma pasta na sua Área de Trabalho.
+      </p>
+
+      <form action="{{ url_for('setup_storage') }}" method="POST">
+        <label>Digite o nome da pasta</label>
+        <input type="text" name="storage_folder_name" value="{{ storage_status.folder_name }}" required>
+
+        <div class="destination">
+          <strong>Destino:</strong> {{ storage_status.path }}
+        </div>
+
+        <button type="submit">Criar pasta de armazenamento</button>
+      </form>
+    {% else %}
+      <p class="status-ok">Pasta de armazenamento criada e pronta para uso.</p>
+
+      <div class="destination">
+        <strong>Destino:</strong> {{ storage_status.path }}
+      </div>
+
+      <form action="{{ url_for('reset_storage_config') }}" method="POST">
+        <button class="secondary-button" type="submit">Limpar e criar uma nova pasta</button>
+      </form>
+    {% endif %}
+  </div>
+
+  <div class="box">
+    <h2>Novo projeto</h2>
+
     <form action="/upload" method="POST" enctype="multipart/form-data">
+      <label>Título do projeto</label>
+      <input type="text" name="project_title" placeholder="Ex: Podcast Renan - Impermeabilização" required>
+
+      <label>Escolha a tarefa</label>
+      <div class="radio-group">
+        <label class="radio-card">
+          <input type="radio" name="task_type" value="ai_cuts" checked>
+          <span>
+            <span class="radio-title">Cortes e Ganchos com I.A</span>
+            <span class="radio-description">Gera transcrição, sugere cortes com inteligência artificial e permite exportar conteúdo completo e gancho.</span>
+          </span>
+        </label>
+
+        <label class="radio-card">
+          <input type="radio" name="task_type" value="video_splitter" disabled>
+          <span>
+            <span class="radio-title">Video Splitter — em breve</span>
+            <span class="radio-description">Fatiar vídeos por duração fixa ou por número de partes, sem usar I.A.</span>
+          </span>
+        </label>
+      </div>
+
+      <label>Selecionar arquivo bruto</label>
       <input type="file" name="video_file" accept=".mp4,.mov,.mkv,.avi" required>
-      <br>
-      <button type="submit">Selecionar arquivo bruto</button>
+      <p class="small-hint">Esse arquivo será copiado para a pasta de armazenamento.</p>
+
+      <button type="submit">Criar projeto</button>
     </form>
   </div>
 
   <div class="box">
-    <h2>Projetos</h2>
+    <h2>Projetos atuais</h2>
+
     {% if projects %}
-      <ul>
+      <div class="project-list">
         {% for project in projects %}
-          <li>
-            <a href="{{ url_for('project_detail', project_id=project.id) }}">{{ project.id }}</a>
-            — {{ project.video_name }} — <strong>{{ project.status }}</strong>
-          </li>
+          <div class="project-row">
+            <div class="project-info">
+              <span class="project-number">{{ project.project_number }}</span>
+              <span class="project-separator">|</span>
+              <a href="{{ url_for('project_detail', project_id=project.id) }}" class="project-title">
+                {{ project.project_title or project.id }}
+              </a>
+              <span class="project-video">— {{ project.video_name }}</span>
+              <span class="project-status">— <strong>{{ project.status }}</strong></span>
+            </div>
+
+            <form action="{{ url_for('delete_project', project_id=project.id) }}" method="POST"
+                  onsubmit="return confirm('Tem certeza que deseja excluir este projeto?\n\nAo avançar, a pasta inteira do projeto será apagada, incluindo vídeos brutos, vídeos finalizados, áudios, transcrições, dados de processamento e todo o histórico deste projeto.\n\nDeseja continuar?');">
+              <button class="delete-button" type="submit">Excluir projeto</button>
+            </form>
+          </div>
         {% endfor %}
-      </ul>
+      </div>
     {% else %}
       <p>Nenhum projeto criado ainda.</p>
     {% endif %}
   </div>
+
 </body>
 </html>

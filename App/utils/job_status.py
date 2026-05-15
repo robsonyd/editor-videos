@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def get_status_file(project_path, job_type):
-    return Path(project_path) / f"{job_type}_status.json"
+    return Path(project_path) / "Estrutura de Processamento" / "Dados de Processamento" / f"{job_type}_status.json"
 
 
 def build_idle_status(job_type=None):

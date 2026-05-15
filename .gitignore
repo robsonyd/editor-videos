@@ -47,3 +47,6 @@ mapa_arquivos_editor.txt
 
 # Dependência externa local
 whisper.cpp/
+
+# Configuração local do app
+App/config.json

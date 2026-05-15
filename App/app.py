@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import shutil
 import subprocess
 import threading
 from datetime import datetime
@@ -29,64 +31,166 @@ client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-BRUTO_DIR = BASE_DIR / "Bruto"
-PROCESSADOS_DIR = BASE_DIR / "Processados"
-PROJECTS_DIR = BASE_DIR / "Projetos"
-TRANSCRIPTS_DIR = BASE_DIR / "Transcricoes"
+APP_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = APP_DIR / "config.json"
+DEFAULT_STORAGE_FOLDER_NAME = "VideosEditados"
+PROCESSING_FOLDER_NAME = "Estrutura de Processamento"
+PROJECT_PROCESSING_SUBFOLDERS = ["Audios", "Arquivo Video Bruto", "Dados de Processamento", "Transcrições"]
+PROJECT_PUBLIC_SUBFOLDERS = ["Videos Finalizados"]
 
 WHISPER_CLI_PATH = BASE_DIR / "whisper.cpp" / "build" / "bin" / "whisper-cli"
 WHISPER_MODEL_PATH = BASE_DIR / "Modelos" / "ggml-base.bin"
 
 JOB_TYPES = ["generate_transcription", "suggest_cuts", "process_cuts"]
 
-for folder in [BRUTO_DIR, PROCESSADOS_DIR, PROJECTS_DIR, TRANSCRIPTS_DIR]:
-    folder.mkdir(parents=True, exist_ok=True)
+
+# Normaliza nomes de pasta digitados pelo usuário.
+def sanitize_folder_name(value: str) -> str:
+    cleaned = "".join(c for c in value if c.isalnum() or c in (" ", "_", "-")).strip()
+    cleaned = " ".join(cleaned.split())
+    return cleaned or DEFAULT_STORAGE_FOLDER_NAME
+
+
+# Carrega a configuração local do app.
+def load_app_config() -> dict:
+    if CONFIG_PATH.exists():
+        try:
+            data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+    return {"storage_folder_name": DEFAULT_STORAGE_FOLDER_NAME}
+
+
+# Salva a configuração local do app.
+def save_app_config(config: dict):
+    CONFIG_PATH.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+# Retorna o nome da pasta de armazenamento.
+def get_storage_folder_name() -> str:
+    config = load_app_config()
+    return sanitize_folder_name(config.get("storage_folder_name", DEFAULT_STORAGE_FOLDER_NAME))
+
+
+# Retorna a pasta raiz externa de armazenamento.
+def get_storage_root() -> Path:
+    return Path.home() / "Desktop" / get_storage_folder_name()
+
+
+# Cria a pasta raiz externa, se necessário.
+def ensure_storage_root(folder_name: str | None = None) -> Path:
+    if folder_name is not None:
+        folder_name = sanitize_folder_name(folder_name)
+        save_app_config({"storage_folder_name": folder_name})
+
+    storage_root = get_storage_root()
+    storage_root.mkdir(parents=True, exist_ok=True)
+    return storage_root
+
+
+# Retorna informações da pasta externa para a Home.
+def get_storage_status() -> dict:
+    storage_root = get_storage_root()
+    return {
+        "folder_name": get_storage_folder_name(),
+        "path": str(storage_root),
+        "exists": storage_root.exists(),
+    }
 
 
 # Retorna o caminho raiz de um projeto.
 def get_project_path(project_id: str) -> Path:
-    return PROJECTS_DIR / project_id
+    return get_storage_root() / project_id
+
+
+# Retorna a pasta interna de processamento de um projeto.
+def get_processing_path(project_id: str) -> Path:
+    return get_project_path(project_id) / PROCESSING_FOLDER_NAME
+
+
+# Retorna subpasta padronizada de um projeto.
+def get_project_subdir(project_id: str, folder_name: str) -> Path:
+    if folder_name == "Videos Finalizados":
+        return get_project_path(project_id) / "Videos Finalizados"
+    return get_processing_path(project_id) / folder_name
+
+
+# Cria um ID único, limpo e numerado para o projeto.
+def build_unique_project_id(project_slug: str) -> str:
+    storage_root = get_storage_root()
+    storage_root.mkdir(parents=True, exist_ok=True)
+
+    used_numbers = set()
+    pattern = re.compile(r"^(\d{2})_")
+
+    for item in storage_root.iterdir():
+        if not item.is_dir():
+            continue
+
+        match = pattern.match(item.name)
+        if match:
+            used_numbers.add(int(match.group(1)))
+
+    for number in range(1, 100):
+        if number not in used_numbers:
+            return f"{number:02d}_{project_slug}"
+
+    raise ValueError("Limite de 99 projetos atingido nesta pasta de armazenamento.")
+
+
+# Cria a estrutura padrão de um projeto.
+def ensure_project_structure(project_id: str) -> Path:
+    project_path = get_project_path(project_id)
+
+    for folder_name in PROJECT_PUBLIC_SUBFOLDERS:
+        (project_path / folder_name).mkdir(parents=True, exist_ok=True)
+
+    for folder_name in PROJECT_PROCESSING_SUBFOLDERS:
+        (get_processing_path(project_id) / folder_name).mkdir(parents=True, exist_ok=True)
+
+    return project_path
 
 
 # Retorna o caminho do metadata do projeto.
 def get_metadata_path(project_id: str) -> Path:
-    return get_project_path(project_id) / "metadata.txt"
+    return get_project_subdir(project_id, "Dados de Processamento") / "metadata.txt"
 
 
 # Retorna o caminho do registro principal dos cortes.
 def get_cuts_registry_path(project_id: str) -> Path:
-    return get_project_path(project_id) / "cuts.json"
+    return get_project_subdir(project_id, "Dados de Processamento") / "cuts.json"
 
 
 # Retorna o caminho do arquivo texto compatível com o legado.
 def get_cuts_txt_path(project_id: str) -> Path:
-    return get_project_path(project_id) / "cuts.txt"
+    return get_project_subdir(project_id, "Dados de Processamento") / "cuts.txt"
 
 
 # Retorna o caminho das sugestões selecionadas para a seção 5.
 def get_selected_ai_cuts_path(project_id: str) -> Path:
-    return get_project_path(project_id) / "selected_ai_cuts.json"
+    return get_project_subdir(project_id, "Dados de Processamento") / "selected_ai_cuts.json"
 
 
 # Retorna o caminho das sugestões da IA.
 def get_ai_suggestions_path(project_id: str) -> Path:
-    return get_project_path(project_id) / "ai_suggestions.json"
+    return get_project_subdir(project_id, "Dados de Processamento") / "ai_suggestions.json"
 
 
 # Retorna o caminho base dos arquivos de transcrição.
 def get_transcript_txt_path(project_id: str) -> Path:
-    return TRANSCRIPTS_DIR / f"{project_id}_transcricao.txt"
+    return get_project_subdir(project_id, "Transcrições") / f"{project_id}_transcricao.txt"
 
 
 # Retorna o caminho SRT da transcrição.
 def get_transcript_srt_path(project_id: str) -> Path:
-    return TRANSCRIPTS_DIR / f"{project_id}_transcricao.srt"
+    return get_project_subdir(project_id, "Transcrições") / f"{project_id}_transcricao.srt"
 
 
 # Salva o metadata simples do projeto.
 def save_metadata(project_id: str, data: dict):
-    project_path = get_project_path(project_id)
-    project_path.mkdir(parents=True, exist_ok=True)
+    ensure_project_structure(project_id)
     metadata_path = get_metadata_path(project_id)
 
     with metadata_path.open("w", encoding="utf-8") as f:
@@ -116,11 +220,11 @@ def sanitize_filename(value: str) -> str:
 
 
 # Gera um nome de arquivo final único sem usar o id do projeto.
-def build_unique_output_name(name: str) -> str:
+def build_unique_output_name(output_dir: Path, name: str) -> str:
     base_name = sanitize_filename(name)
     candidate = f"{base_name}.mp4"
     index = 2
-    while (PROCESSADOS_DIR / candidate).exists():
+    while (output_dir / candidate).exists():
         candidate = f"{base_name}_{index}.mp4"
         index += 1
     return candidate
@@ -301,7 +405,7 @@ def get_processed_files(project_id: str) -> list:
     for cut in load_cuts_registry(project_id):
         output_name = cut.get("output_name", "").strip()
         if cut.get("status") == "processed" and output_name:
-            output_path = PROCESSADOS_DIR / output_name
+            output_path = get_project_subdir(project_id, "Videos Finalizados") / output_name
             if output_path.exists() and output_name not in files:
                 files.append(output_name)
     return files
@@ -364,8 +468,8 @@ def run_generate_transcription_job(project_id: str):
             raise FileNotFoundError("modelo whisper não encontrado")
 
         project_path = get_project_path(project_id)
-        wav_path = project_path / f"{project_id}.wav"
-        transcript_base = TRANSCRIPTS_DIR / f"{project_id}_transcricao"
+        wav_path = get_project_subdir(project_id, "Audios") / f"{project_id}.wav"
+        transcript_base = get_project_subdir(project_id, "Transcrições") / f"{project_id}_transcricao"
         transcript_txt_path = get_transcript_txt_path(project_id)
         transcript_srt_path = get_transcript_srt_path(project_id)
 
@@ -566,8 +670,9 @@ def run_process_cuts_job(project_id: str):
                 cut["status"] = "error"
                 continue
 
-            output_name = build_unique_output_name(name)
-            output_file = PROCESSADOS_DIR / output_name
+            output_dir = get_project_subdir(project_id, "Videos Finalizados")
+            output_name = build_unique_output_name(output_dir, name)
+            output_file = output_dir / output_name
 
             try:
                 subprocess.run(
@@ -699,18 +804,60 @@ def append_selected_ai_cuts_to_registry(project_id: str):
 @app.route("/")
 def home():
     projects = []
-    if PROJECTS_DIR.exists():
-        for project_folder in sorted(PROJECTS_DIR.iterdir(), reverse=True):
+    storage_status = get_storage_status()
+    storage_root = get_storage_root()
+    if storage_root.exists():
+        for project_folder in sorted(storage_root.iterdir(), reverse=True):
             if project_folder.is_dir():
                 metadata = load_metadata(project_folder.name)
                 projects.append(
                     {
                         "id": project_folder.name,
+                        "project_number": project_folder.name.split("_", 1)[0] if "_" in project_folder.name else "",
+                        "project_title": metadata.get("project_title", ""),
                         "video_name": metadata.get("video_name", ""),
                         "status": metadata.get("status", "Novo"),
                     }
                 )
-    return render_template("index.html", projects=projects)
+    return render_template("index.html", projects=projects, storage_status=storage_status)
+
+
+@app.route("/setup_storage", methods=["POST"])
+def setup_storage():
+    folder_name = request.form.get("storage_folder_name", DEFAULT_STORAGE_FOLDER_NAME)
+    ensure_storage_root(folder_name)
+    return redirect(url_for("home"))
+
+
+@app.route("/reset_storage_config", methods=["POST"])
+def reset_storage_config():
+    if CONFIG_PATH.exists():
+        CONFIG_PATH.unlink()
+    return redirect(url_for("home"))
+
+
+@app.route("/open_project_folder/<project_id>", methods=["POST"])
+def open_project_folder(project_id):
+    project_path = get_project_path(project_id)
+    if project_path.exists():
+        subprocess.run(["open", str(project_path)], check=False)
+    return redirect(url_for("project_detail", project_id=project_id))
+
+
+@app.route("/delete_project/<project_id>", methods=["POST"])
+def delete_project(project_id):
+    project_path = get_project_path(project_id)
+    storage_root = get_storage_root().resolve()
+
+    try:
+        resolved_project_path = project_path.resolve()
+    except FileNotFoundError:
+        return redirect(url_for("home"))
+
+    if storage_root in resolved_project_path.parents and resolved_project_path.exists():
+        shutil.rmtree(resolved_project_path)
+
+    return redirect(url_for("home"))
 
 
 @app.route("/upload", methods=["POST"])
@@ -722,13 +869,15 @@ def upload_video():
     if file.filename == "":
         return redirect(url_for("home"))
 
+    ensure_storage_root()
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    project_id = f"projeto_{timestamp}"
-    project_path = get_project_path(project_id)
-    project_path.mkdir(parents=True, exist_ok=True)
+    project_title = request.form.get("project_title", "").strip() or f"Projeto {timestamp}"
+    project_slug = sanitize_filename(project_title).lower().replace(" ", "_")
+    project_id = build_unique_project_id(project_slug)
+    project_path = ensure_project_structure(project_id)
 
     video_name = file.filename
-    bruto_path = BRUTO_DIR / f"{project_id}_{video_name}"
+    bruto_path = get_project_subdir(project_id, "Arquivo Video Bruto") / f"{project_id}_{video_name}"
     file.save(bruto_path)
 
     duration = get_video_duration(bruto_path)
@@ -736,6 +885,7 @@ def upload_video():
         project_id,
         {
             "project_id": project_id,
+            "project_title": project_title,
             "video_name": video_name,
             "video_path": str(bruto_path),
             "duration": str(duration) if duration else "",
@@ -806,8 +956,8 @@ def reset_project(project_id):
         get_cuts_registry_path(project_id),
         get_ai_suggestions_path(project_id),
         get_selected_ai_cuts_path(project_id),
-        project_path / f"{project_id}.wav",
-        project_path / "selected_ai_cut.json",
+        get_project_subdir(project_id, "Audios") / f"{project_id}.wav",
+        get_project_subdir(project_id, "Dados de Processamento") / "selected_ai_cut.json",
     ]
 
     for path in paths:
@@ -815,7 +965,7 @@ def reset_project(project_id):
             path.unlink()
 
     for output_name in get_processed_files(project_id):
-        output_path = PROCESSADOS_DIR / output_name
+        output_path = get_project_subdir(project_id, "Videos Finalizados") / output_name
         if output_path.exists():
             output_path.unlink()
 
@@ -971,7 +1121,7 @@ def delete_cut(project_id, cut_index):
         removed = cuts.pop(cut_index)
         output_name = removed.get("output_name", "").strip()
         if output_name:
-            output_path = PROCESSADOS_DIR / output_name
+            output_path = get_project_subdir(project_id, "Videos Finalizados") / output_name
             if output_path.exists():
                 output_path.unlink()
 
