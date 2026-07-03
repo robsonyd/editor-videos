@@ -337,6 +337,230 @@
     <p><a href="{{ url_for('home') }}">← Voltar para a página inicial</a></p>
   </div>
 
+
+  {% if metadata.get("task_type", "ai_cuts") == "video_splitter" %}
+    <div class="box">
+      <h2>Video Splitter</h2>
+      <p class="hint">Divida o vídeo em partes automáticas, sem transcrição e sem IA.</p>
+
+      <form action="{{ url_for('split_video', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="split_video" data-project-id="{{ project_id }}" data-keep-scroll="true">
+        <input type="hidden" name="scroll_y" value="0">
+
+        <h3>Modo de divisão</h3>
+        <div class="radio-group" style="display:grid; gap:10px; margin: 12px 0 18px;">
+          <label style="display:flex; gap:10px; align-items:flex-start;">
+            <input type="radio" name="split_mode" value="fixed_duration" checked>
+            <span>
+              <strong>Por duração fixa</strong><br>
+              <span class="hint">Ex: gerar partes de 30 segundos, 1 minuto, 3 minutos etc.</span>
+            </span>
+          </label>
+
+          <label style="display:flex; gap:10px; align-items:flex-start;">
+            <input type="radio" name="split_mode" value="by_parts">
+            <span>
+              <strong>Por número de partes</strong><br>
+              <span class="hint">Ex: dividir o vídeo inteiro em 3, 5 ou 10 partes iguais.</span>
+            </span>
+          </label>
+
+          <label style="display:flex; gap:10px; align-items:flex-start;">
+            <input type="radio" name="split_mode" value="social_preset">
+            <span>
+              <strong>Preset por rede social</strong><br>
+              <span class="hint">Escolha Instagram, YouTube, TikTok ou LinkedIn e corte na duração ideal.</span>
+            </span>
+          </label>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div id="fixed-duration-fields">
+          <h3>Duração de cada parte</h3>
+          <select id="split-duration-select" name="split_duration_seconds" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; font-size:14px;">
+            <option value="15">15 segundos</option>
+            <option value="30">30 segundos</option>
+            <option value="60" selected>60 segundos</option>
+            <option value="90">90 segundos</option>
+            <option value="120">2 minutos</option>
+            <option value="180">3 minutos</option>
+            <option value="300">5 minutos</option>
+            <option value="custom">Personalizado</option>
+          </select>
+
+          <div id="custom-duration-field" style="display:none; margin-top:12px;">
+            <label for="custom_duration_seconds"><strong>Duração personalizada em segundos</strong></label>
+            <input type="number" id="custom_duration_seconds" name="custom_duration_seconds" min="1" step="1" placeholder="Ex: 45">
+          </div>
+        </div>
+
+        <div id="parts-fields" style="display:none;">
+          <h3>Número de partes</h3>
+          <input type="number" name="split_parts" min="1" max="10" step="1" value="3">
+          <p class="hint">Limite do MVP: até 10 partes.</p>
+        </div>
+
+        <div id="social-preset-fields" style="display:none;">
+          <h3>Preset por rede social</h3>
+
+          <label for="split-social-platform"><strong>Rede social</strong></label>
+          <select id="split-social-platform" name="split_social_platform" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; font-size:14px;">
+            <option value="instagram">Instagram</option>
+            <option value="youtube">YouTube</option>
+            <option value="tiktok">TikTok</option>
+            <option value="linkedin">LinkedIn</option>
+          </select>
+
+          <label for="split-social-format" style="margin-top:12px;"><strong>Formato</strong></label>
+          <select id="split-social-format" name="split_social_format" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; font-size:14px;"></select>
+
+          <label for="split-social-duration" style="margin-top:12px;"><strong>Duração de cada parte</strong></label>
+          <select id="split-social-duration" name="split_social_duration_seconds" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; font-size:14px;"></select>
+
+          <p class="hint">O splitter vai gerar partes sequenciais com a duração escolhida para esse formato.</p>
+        </div>
+
+        <button type="submit">Processar divisão</button>
+      </form>
+
+      <form action="{{ url_for('reset_project', project_id=project_id) }}" method="POST" data-keep-scroll="true" style="margin-top: 12px;">
+        <input type="hidden" name="scroll_y" value="0">
+        <button type="submit" class="secondary-button">Limpar arquivos gerados</button>
+      </form>
+    </div>
+
+    <div class="box">
+      <h2>Arquivos gerados</h2>
+
+      {% if processed_files %}
+        <ul>
+          {% for file in processed_files %}
+            <li>{{ file }}</li>
+          {% endfor %}
+        </ul>
+
+        <p class="hint">Os arquivos estão na pasta Videos Finalizados dentro da pasta deste projeto.</p>
+
+        <form action="{{ url_for('open_project_folder', project_id=project_id) }}" method="POST" style="margin-top: 12px;">
+          <button type="submit">Abrir pasta do projeto</button>
+        </form>
+      {% else %}
+        <p>Nenhum arquivo gerado ainda.</p>
+      {% endif %}
+    </div>
+
+    <script>
+      (function () {
+        const modeInputs = document.querySelectorAll('input[name="split_mode"]');
+        const fixedFields = document.getElementById('fixed-duration-fields');
+        const partsFields = document.getElementById('parts-fields');
+        const durationSelect = document.getElementById('split-duration-select');
+        const customField = document.getElementById('custom-duration-field');
+        const socialFields = document.getElementById('social-preset-fields');
+        const socialPlatform = document.getElementById('split-social-platform');
+        const socialFormat = document.getElementById('split-social-format');
+        const socialDuration = document.getElementById('split-social-duration');
+
+        const socialPresets = {
+          instagram: {
+            label: 'Instagram',
+            formats: {
+              reels: { label: 'Reels', durations: [15, 30, 60, 90] },
+              stories: { label: 'Stories', durations: [15, 30, 60] }
+            }
+          },
+          youtube: {
+            label: 'YouTube',
+            formats: {
+              shorts: { label: 'Shorts', durations: [15, 30, 60, 180] }
+            }
+          },
+          tiktok: {
+            label: 'TikTok',
+            formats: {
+              tiktok: { label: 'TikTok', durations: [15, 30, 60, 180] }
+            }
+          },
+          linkedin: {
+            label: 'LinkedIn',
+            formats: {
+              feed: { label: 'Feed profissional', durations: [15, 30, 60, 90] }
+            }
+          }
+        };
+
+        function durationLabel(seconds) {
+          if (seconds < 60) return `${seconds} segundos`;
+          if (seconds === 60) return '60 segundos';
+          if (seconds % 60 === 0) return `${seconds / 60} minutos`;
+          return `${seconds} segundos`;
+        }
+
+        function refreshSocialFormats() {
+          if (!socialPlatform || !socialFormat) return;
+
+          const platform = socialPlatform.value;
+          const currentFormat = socialFormat.value;
+          const formats = socialPresets[platform].formats;
+
+          socialFormat.innerHTML = '';
+
+          Object.entries(formats).forEach(([value, data]) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = data.label;
+            socialFormat.appendChild(option);
+          });
+
+          if (formats[currentFormat]) {
+            socialFormat.value = currentFormat;
+          }
+
+          refreshSocialDurations();
+        }
+
+        function refreshSocialDurations() {
+          if (!socialPlatform || !socialFormat || !socialDuration) return;
+
+          const platform = socialPlatform.value;
+          const format = socialFormat.value;
+          const durations = socialPresets[platform].formats[format].durations;
+
+          socialDuration.innerHTML = '';
+
+          durations.forEach((seconds) => {
+            const option = document.createElement('option');
+            option.value = String(seconds);
+            option.textContent = durationLabel(seconds);
+            socialDuration.appendChild(option);
+          });
+        }
+
+        function refreshMode() {
+          const selected = document.querySelector('input[name="split_mode"]:checked');
+          const mode = selected ? selected.value : 'fixed_duration';
+          if (fixedFields) fixedFields.style.display = mode === 'fixed_duration' ? 'block' : 'none';
+          if (partsFields) partsFields.style.display = mode === 'by_parts' ? 'block' : 'none';
+          if (socialFields) socialFields.style.display = mode === 'social_preset' ? 'block' : 'none';
+        }
+
+        function refreshCustomDuration() {
+          if (!durationSelect || !customField) return;
+          customField.style.display = durationSelect.value === 'custom' ? 'block' : 'none';
+        }
+
+        modeInputs.forEach(input => input.addEventListener('change', refreshMode));
+        if (durationSelect) durationSelect.addEventListener('change', refreshCustomDuration);
+        if (socialPlatform) socialPlatform.addEventListener('change', refreshSocialFormats);
+        if (socialFormat) socialFormat.addEventListener('change', refreshSocialDurations);
+
+        refreshSocialFormats();
+        refreshMode();
+        refreshCustomDuration();
+      })();
+    </script>
+  {% else %}
+
   <div class="box">
     <h2>1. Vamos começar</h2>
     <div class="actions-row">
@@ -780,6 +1004,8 @@
       }
     })();
   </script>
+
+  {% endif %}
 
   <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
 </body>

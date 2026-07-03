@@ -248,8 +248,8 @@
     <h2>Novo projeto</h2>
 
     <form action="/upload" method="POST" enctype="multipart/form-data">
-      <label>Título do projeto</label>
-      <input type="text" name="project_title" placeholder="Ex: Podcast Renan - Impermeabilização" required>
+      <label>Título do projeto <span style="font-weight: normal; color: #777;">(opcional)</span></label>
+      <input type="text" name="project_title" placeholder="Deixe em branco para usar o nome do arquivo original">
 
       <label>Escolha a tarefa</label>
       <div class="radio-group">
@@ -262,9 +262,9 @@
         </label>
 
         <label class="radio-card">
-          <input type="radio" name="task_type" value="video_splitter" disabled>
+          <input type="radio" name="task_type" value="video_splitter">
           <span>
-            <span class="radio-title">Video Splitter — em breve</span>
+            <span class="radio-title">Video Splitter</span>
             <span class="radio-description">Fatiar vídeos por duração fixa ou por número de partes, sem usar I.A.</span>
           </span>
         </label>
@@ -292,6 +292,7 @@
                 {{ project.project_title or project.id }}
               </a>
               <span class="project-video">— {{ project.video_name }}</span>
+              <span class="project-status">— {{ project.task_label }}</span>
               <span class="project-status">— <strong>{{ project.status }}</strong></span>
             </div>
 

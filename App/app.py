@@ -23,6 +23,9 @@ from utils.job_status import (
 
 load_dotenv()
 
+# Garante que o app aberto pelo Finder encontre ffmpeg/ffprobe instalados via Homebrew.
+os.environ["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", "")
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
 
@@ -41,7 +44,35 @@ PROJECT_PUBLIC_SUBFOLDERS = ["Videos Finalizados"]
 WHISPER_CLI_PATH = BASE_DIR / "whisper.cpp" / "build" / "bin" / "whisper-cli"
 WHISPER_MODEL_PATH = BASE_DIR / "Modelos" / "ggml-base.bin"
 
-JOB_TYPES = ["generate_transcription", "suggest_cuts", "process_cuts"]
+JOB_TYPES = ["generate_transcription", "suggest_cuts", "process_cuts", "split_video"]
+
+SPLIT_SOCIAL_PRESETS = {
+    "instagram": {
+        "label": "Instagram",
+        "formats": {
+            "reels": {"label": "Reels", "durations": [15, 30, 60, 90]},
+            "stories": {"label": "Stories", "durations": [15, 30, 60]},
+        },
+    },
+    "youtube": {
+        "label": "YouTube",
+        "formats": {
+            "shorts": {"label": "Shorts", "durations": [15, 30, 60, 180]},
+        },
+    },
+    "tiktok": {
+        "label": "TikTok",
+        "formats": {
+            "tiktok": {"label": "TikTok", "durations": [15, 30, 60, 180]},
+        },
+    },
+    "linkedin": {
+        "label": "LinkedIn",
+        "formats": {
+            "feed": {"label": "Feed profissional", "durations": [15, 30, 60, 90]},
+        },
+    },
+}
 
 
 # Normaliza nomes de pasta digitados pelo usuário.
@@ -633,6 +664,156 @@ Transcrição:
         fail_job(project_id, "suggest_cuts", str(e))
 
 
+
+# Monta os segmentos do Video Splitter.
+def build_split_segments(duration: float, mode: str, fixed_seconds: int | None = None, parts: int | None = None) -> list[tuple[float, float]]:
+    if not duration or duration <= 0:
+        raise ValueError("duração do vídeo inválida")
+
+    segments = []
+
+    if mode in ("fixed_duration", "social_preset"):
+        if not fixed_seconds or fixed_seconds <= 0:
+            raise ValueError("duração fixa inválida")
+
+        start = 0.0
+        while start < duration:
+            end = min(duration, start + fixed_seconds)
+            if end - start >= 0.5:
+                segments.append((start, end))
+            start = end
+
+    elif mode == "by_parts":
+        if not parts or parts < 1 or parts > 10:
+            raise ValueError("número de partes inválido")
+
+        segment_duration = duration / parts
+        for index in range(parts):
+            start = index * segment_duration
+            end = duration if index == parts - 1 else (index + 1) * segment_duration
+            if end - start >= 0.5:
+                segments.append((start, end))
+    else:
+        raise ValueError("modo de divisão inválido")
+
+    if not segments:
+        raise ValueError("nenhum segmento válido gerado")
+
+    return segments
+
+
+# Executa o Video Splitter em segundo plano.
+def run_split_video_job(project_id: str):
+    metadata = load_metadata(project_id)
+    video_path = metadata.get("video_path", "")
+
+    try:
+        if not video_path or not Path(video_path).exists():
+            raise FileNotFoundError("vídeo ausente")
+
+        duration = get_video_duration(video_path)
+        if not duration:
+            duration = float(metadata.get("duration") or 0)
+        if not duration:
+            raise ValueError("não foi possível ler a duração do vídeo")
+
+        mode = metadata.get("split_mode", "fixed_duration")
+        fixed_seconds = int(float(metadata.get("split_duration_seconds") or 0)) if metadata.get("split_duration_seconds") else None
+        parts = int(metadata.get("split_parts") or 0) if metadata.get("split_parts") else None
+        segments = build_split_segments(duration, mode, fixed_seconds=fixed_seconds, parts=parts)
+
+        output_dir = get_project_subdir(project_id, "Videos Finalizados")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        cuts = load_cuts_registry(project_id)
+        remaining_cuts = []
+
+        for cut in cuts:
+            if cut.get("source") == "video_splitter":
+                output_name = cut.get("output_name", "").strip()
+                if output_name:
+                    output_path = output_dir / output_name
+                    if output_path.exists():
+                        output_path.unlink()
+            else:
+                remaining_cuts.append(cut)
+
+        batch_id = datetime.now().strftime("%Y%m%d%H%M%S")
+        generated_cuts = []
+        total = len(segments)
+
+        for position, (start_seconds, end_seconds) in enumerate(segments, start=1):
+            progress = int(5 + ((position - 1) / total) * 90)
+            update_job(
+                project_id,
+                "split_video",
+                build_running_status(
+                    "split_video",
+                    progress,
+                    f"Gerando parte {position} de {total}...",
+                    f"{format_seconds_to_time(start_seconds)} até {format_seconds_to_time(end_seconds)}",
+                ),
+            )
+
+            output_name = build_unique_output_name(output_dir, f"{project_id}_parte_{position:02d}")
+            output_file = output_dir / output_name
+            segment_duration = max(0.5, end_seconds - start_seconds)
+
+            try:
+                subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-ss",
+                        f"{start_seconds:.3f}",
+                        "-i",
+                        video_path,
+                        "-t",
+                        f"{segment_duration:.3f}",
+                        "-c:v",
+                        "libx264",
+                        "-c:a",
+                        "aac",
+                        str(output_file),
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except subprocess.CalledProcessError as e:
+                raise RuntimeError(f"ffmpeg falhou: {e.stderr or e.stdout or str(e)}")
+
+            if not output_file.exists():
+                raise RuntimeError("arquivo de saída não gerado")
+
+            generated_cuts.append(
+                {
+                    "start": format_seconds_to_time(start_seconds),
+                    "end": format_seconds_to_time(end_seconds),
+                    "name": f"Parte {position:02d}",
+                    "batch_id": batch_id,
+                    "status": "processed",
+                    "output_name": output_name,
+                    "source": "video_splitter",
+                }
+            )
+
+            save_cuts_registry(project_id, remaining_cuts + generated_cuts)
+
+        metadata["status"] = f"Video Splitter concluído: {total} parte(s) gerada(s)"
+        metadata["cuts_defined"] = "yes"
+        metadata["duration"] = str(duration)
+        save_metadata(project_id, metadata)
+
+        update_job(
+            project_id,
+            "split_video",
+            build_success_status("split_video", "Divisão concluída", f"{total} parte(s) foram geradas com sucesso."),
+        )
+    except Exception as e:
+        fail_job(project_id, "split_video", str(e))
+
+
 # Executa o processamento apenas do lote pendente mais recente.
 def run_process_cuts_job(project_id: str):
     metadata = load_metadata(project_id)
@@ -817,6 +998,8 @@ def home():
                         "project_title": metadata.get("project_title", ""),
                         "video_name": metadata.get("video_name", ""),
                         "status": metadata.get("status", "Novo"),
+                        "task_type": metadata.get("task_type", "ai_cuts"),
+                        "task_label": "Video Splitter" if metadata.get("task_type") == "video_splitter" else "Cortes e Ganchos com I.A",
                     }
                 )
     return render_template("index.html", projects=projects, storage_status=storage_status)
@@ -871,12 +1054,16 @@ def upload_video():
 
     ensure_storage_root()
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    project_title = request.form.get("project_title", "").strip() or f"Projeto {timestamp}"
+    video_name = file.filename
+    default_project_title = Path(video_name).stem or f"Projeto {timestamp}"
+    project_title = request.form.get("project_title", "").strip() or default_project_title
+    task_type = request.form.get("task_type", "ai_cuts")
+    if task_type not in ("ai_cuts", "video_splitter"):
+        task_type = "ai_cuts"
     project_slug = sanitize_filename(project_title).lower().replace(" ", "_")
     project_id = build_unique_project_id(project_slug)
     project_path = ensure_project_structure(project_id)
 
-    video_name = file.filename
     bruto_path = get_project_subdir(project_id, "Arquivo Video Bruto") / f"{project_id}_{video_name}"
     file.save(bruto_path)
 
@@ -890,6 +1077,7 @@ def upload_video():
             "video_path": str(bruto_path),
             "duration": str(duration) if duration else "",
             "status": "Vídeo carregado",
+            "task_type": task_type,
             "transcription_generated": "no",
             "cuts_defined": "no",
         },
@@ -935,6 +1123,86 @@ def project_detail(project_id):
         next_cut_number=next_cut_number,
         job_statuses=job_statuses,
     )
+
+
+
+@app.route("/split_video/<project_id>", methods=["POST"])
+def split_video(project_id):
+    try:
+        metadata = load_metadata(project_id)
+        mode = request.form.get("split_mode", "fixed_duration")
+
+        if mode in ("fixed_duration", "social_preset"):
+            duration_value = request.form.get("split_duration_seconds", "60")
+            if duration_value == "custom":
+                duration_value = request.form.get("custom_duration_seconds", "")
+            duration_seconds = int(float((duration_value or "").replace(",", ".")))
+            if duration_seconds <= 0:
+                raise ValueError("Informe uma duração válida.")
+
+            metadata["split_mode"] = "fixed_duration"
+            metadata["split_duration_seconds"] = str(duration_seconds)
+            metadata["split_parts"] = ""
+
+        elif mode == "by_parts":
+            split_parts = int(request.form.get("split_parts", "0"))
+            if split_parts < 1 or split_parts > 10:
+                raise ValueError("Informe um número de partes entre 1 e 10.")
+
+            metadata["split_mode"] = "by_parts"
+            metadata["split_parts"] = str(split_parts)
+            metadata["split_duration_seconds"] = ""
+            metadata["split_social_platform"] = ""
+            metadata["split_social_format"] = ""
+
+        elif mode == "social_preset":
+            platform = request.form.get("split_social_platform", "instagram")
+            social_format = request.form.get("split_social_format", "reels")
+            duration_seconds = int(request.form.get("split_social_duration_seconds", "0"))
+
+            platform_data = SPLIT_SOCIAL_PRESETS.get(platform)
+            if not platform_data:
+                raise ValueError("Rede social inválida.")
+
+            format_data = platform_data["formats"].get(social_format)
+            if not format_data:
+                raise ValueError("Formato de rede social inválido.")
+
+            if duration_seconds not in format_data["durations"]:
+                raise ValueError("Duração inválida para este formato.")
+
+            metadata["split_mode"] = "social_preset"
+            metadata["split_duration_seconds"] = str(duration_seconds)
+            metadata["split_parts"] = ""
+            metadata["split_social_platform"] = platform
+            metadata["split_social_format"] = social_format
+
+        else:
+            raise ValueError("Modo de divisão inválido.")
+
+        metadata["task_type"] = "video_splitter"
+        metadata["status"] = "Video Splitter iniciado"
+        save_metadata(project_id, metadata)
+
+    except Exception as e:
+        if is_ajax_request():
+            return jsonify({"ok": False, "message": str(e)}), 400
+        metadata = load_metadata(project_id)
+        metadata["status"] = str(e)
+        save_metadata(project_id, metadata)
+        return redirect(url_for("project_detail", project_id=project_id))
+
+    started = start_background_job(project_id, "split_video", run_split_video_job)
+
+    if is_ajax_request():
+        if not started:
+            return jsonify({"ok": False, "message": "Já existe uma divisão em andamento."}), 409
+        return jsonify({"ok": True, "job_type": "split_video"})
+
+    scroll_y = request.form.get("scroll_y", "")
+    if scroll_y:
+        return redirect(url_for("project_detail", project_id=project_id, scroll_y=scroll_y))
+    return redirect(url_for("project_detail", project_id=project_id))
 
 
 @app.route("/job_status/<project_id>/<job_type>")
@@ -1151,4 +1419,4 @@ def process_cuts(project_id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5050)
