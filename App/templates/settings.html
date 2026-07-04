@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configurações — Editor de Vídeos</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #f7f7f7;
+      color: #222;
+    }
+
+    .box {
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+      margin-bottom: 24px;
+    }
+
+    h1, h2, h3 { margin-top: 0; }
+    h1 { font-size: 32px; margin-bottom: 8px; }
+    h2 { font-size: 22px; margin-bottom: 16px; }
+
+    a {
+      color: #1f6feb;
+      text-decoration: none;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 14px;
+      margin-bottom: 6px;
+    }
+
+    input[type="password"],
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    button {
+      background: #1f6feb;
+      color: white;
+      border: none;
+      padding: 12px 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 14px;
+    }
+
+    button:hover { background: #1558b0; }
+
+    .secondary-button { background: #444; }
+    .secondary-button:hover { background: #222; }
+
+    .hint {
+      color: #666;
+      font-size: 14px;
+      line-height: 1.5;
+      margin-top: 8px;
+    }
+
+    .small-hint {
+      color: #777;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    .status-ok {
+      color: #137333;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .status-error {
+      color: #b91c1c;
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .settings-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 16px;
+      background: #fafafa;
+    }
+
+    .settings-status {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .settings-status.ok {
+      color: #166534;
+      background: #dcfce7;
+      border: 1px solid #86efac;
+    }
+
+    .settings-status.warn {
+      color: #92400e;
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+    }
+
+    .inline-form {
+      display: inline-block;
+      margin-right: 8px;
+    }
+
+    .danger-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      color: #7f1d1d;
+      font-size: 13px;
+      font-weight: normal;
+    }
+
+    .danger-check input { margin: 0; }
+
+    @media (max-width: 800px) {
+      .settings-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Configurações</h1>
+    <p class="hint">Área isolada para configurar APIs, tokens e integrações da ferramenta.</p>
+    <p><a href="{{ url_for('home') }}">← Voltar para a Home</a></p>
+  </div>
+
+  <div class="box">
+    <h2>APIs e Integrações</h2>
+    <p class="hint">Cadastre aqui as chaves usadas pelo app. Deixe o campo da chave em branco para manter a chave atual.</p>
+
+    {% if request.args.get('saved') %}
+      <p class="status-ok">Configurações salvas.</p>
+    {% endif %}
+
+    {% if request.args.get('api_test') %}
+      <p class="status-ok">{{ request.args.get('api_test') }}</p>
+    {% endif %}
+
+    {% if request.args.get('api_error') %}
+      <p class="status-error">{{ request.args.get('api_error') }}</p>
+    {% endif %}
+
+    <form action="{{ url_for('save_api_settings') }}" method="POST">
+      <div class="settings-grid">
+        <div class="settings-card">
+          <h3>OpenAI</h3>
+
+          {% if api_settings.openai_configured %}
+            <span class="settings-status ok">Configurada</span>
+            <p class="small-hint">Chave atual: {{ api_settings.openai_api_key_masked }}</p>
+          {% else %}
+            <span class="settings-status warn">Não configurada</span>
+          {% endif %}
+
+          <label>OpenAI API Key</label>
+          <input type="password" name="openai_api_key" placeholder="Cole uma nova chave ou deixe em branco para manter">
+
+          <label>Modelo OpenAI</label>
+          <select name="openai_model">
+            {% for model in openai_model_options %}
+              <option value="{{ model.value }}" {% if api_settings.openai_model == model.value %}selected{% endif %}>{{ model.label }}</option>
+            {% endfor %}
+          </select>
+          <p class="small-hint">O usuário escolhe o modelo em lista, sem digitar nome técnico.</p>
+
+          {% if api_settings.openai_configured %}
+            <label class="danger-check">
+              <input type="checkbox" name="clear_openai_api_key" value="1">
+              Remover chave OpenAI salva
+            </label>
+          {% endif %}
+        </div>
+
+        <div class="settings-card">
+          <h3>Hugging Face / Pyannote</h3>
+
+          {% if api_settings.huggingface_configured %}
+            <span class="settings-status ok">Configurada</span>
+            <p class="small-hint">Token atual: {{ api_settings.huggingface_token_masked }}</p>
+          {% else %}
+            <span class="settings-status warn">Não configurada</span>
+          {% endif %}
+
+          <label>Hugging Face Token</label>
+          <input type="password" name="huggingface_token" placeholder="Cole um novo token ou deixe em branco para manter">
+
+          <label>Modelo Pyannote</label>
+          <select name="pyannote_model">
+            {% for model in pyannote_model_options %}
+              <option value="{{ model.value }}" {% if api_settings.pyannote_model == model.value %}selected{% endif %}>{{ model.label }}</option>
+            {% endfor %}
+          </select>
+          <p class="small-hint">A lista pode receber novos modelos compatíveis nas próximas integrações.</p>
+
+          {% if api_settings.huggingface_configured %}
+            <label class="danger-check">
+              <input type="checkbox" name="clear_huggingface_token" value="1">
+              Remover token Hugging Face salvo
+            </label>
+          {% endif %}
+        </div>
+      </div>
+
+      <button type="submit">Salvar configurações</button>
+    </form>
+
+    <form class="inline-form" action="{{ url_for('test_api_settings', provider='openai') }}" method="POST">
+      <button class="secondary-button" type="submit">Testar OpenAI</button>
+    </form>
+
+    <form class="inline-form" action="{{ url_for('test_api_settings', provider='huggingface') }}" method="POST">
+      <button class="secondary-button" type="submit">Testar Hugging Face</button>
+    </form>
+
+    <p class="small-hint">As credenciais ficam salvas localmente neste computador. Não compartilhe nem faça commit do arquivo de configuração gerado.</p>
+  </div>
+</body>
+</html>

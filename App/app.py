@@ -26,12 +26,21 @@ load_dotenv()
 # Garante que o app aberto pelo Finder encontre ffmpeg/ffprobe instalados via Homebrew.
 os.environ["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", "")
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
-HUGGINGFACE_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
-PYANNOTE_MODEL = os.getenv("PYANNOTE_MODEL", "pyannote/speaker-diarization-community-1")
+ENV_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+ENV_OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
+ENV_HUGGINGFACE_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN") or ""
+ENV_PYANNOTE_MODEL = os.getenv("PYANNOTE_MODEL", "pyannote/speaker-diarization-community-1")
 
-client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+OPENAI_MODEL_OPTIONS = [
+    {"value": "gpt-5.4", "label": "GPT-5.4"},
+    {"value": "gpt-5.4-mini", "label": "GPT-5.4 Mini"},
+    {"value": "gpt-5.5", "label": "GPT-5.5"},
+    {"value": "gpt-5.5-thinking", "label": "GPT-5.5 Thinking"},
+]
+
+PYANNOTE_MODEL_OPTIONS = [
+    {"value": "pyannote/speaker-diarization-community-1", "label": "Speaker Diarization Community 1"},
+]
 
 app = Flask(__name__)
 
@@ -85,20 +94,96 @@ def sanitize_folder_name(value: str) -> str:
 
 
 # Carrega a configuração local do app.
+def get_default_app_config() -> dict:
+    return {
+        "storage_folder_name": DEFAULT_STORAGE_FOLDER_NAME,
+        "api_settings": {
+            "openai_api_key": "",
+            "openai_model": ENV_OPENAI_MODEL,
+            "huggingface_token": "",
+            "pyannote_model": ENV_PYANNOTE_MODEL,
+        },
+    }
+
+
 def load_app_config() -> dict:
+    config = get_default_app_config()
+
     if CONFIG_PATH.exists():
         try:
             data = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
             if isinstance(data, dict):
-                return data
+                config.update({key: value for key, value in data.items() if key != "api_settings"})
+                if isinstance(data.get("api_settings"), dict):
+                    config["api_settings"].update(data["api_settings"])
         except json.JSONDecodeError:
             pass
-    return {"storage_folder_name": DEFAULT_STORAGE_FOLDER_NAME}
+
+    return config
 
 
-# Salva a configuração local do app.
+# Salva a configuração local do app preservando campos já existentes.
 def save_app_config(config: dict):
-    CONFIG_PATH.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+    current = load_app_config()
+    for key, value in config.items():
+        if key == "api_settings" and isinstance(value, dict):
+            current.setdefault("api_settings", {})
+            current["api_settings"].update(value)
+        else:
+            current[key] = value
+
+    CONFIG_PATH.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def mask_secret(value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if len(value) <= 10:
+        return "••••••"
+    return f"{value[:6]}••••••{value[-4:]}"
+
+
+def get_api_settings() -> dict:
+    settings = load_app_config().get("api_settings", {})
+
+    return {
+        "openai_api_key": settings.get("openai_api_key") or ENV_OPENAI_API_KEY,
+        "openai_model": settings.get("openai_model") or ENV_OPENAI_MODEL,
+        "huggingface_token": settings.get("huggingface_token") or ENV_HUGGINGFACE_TOKEN,
+        "pyannote_model": settings.get("pyannote_model") or ENV_PYANNOTE_MODEL,
+    }
+
+
+def get_public_api_settings() -> dict:
+    settings = get_api_settings()
+    return {
+        "openai_configured": bool(settings.get("openai_api_key")),
+        "openai_api_key_masked": mask_secret(settings.get("openai_api_key", "")),
+        "openai_model": settings.get("openai_model", ""),
+        "huggingface_configured": bool(settings.get("huggingface_token")),
+        "huggingface_token_masked": mask_secret(settings.get("huggingface_token", "")),
+        "pyannote_model": settings.get("pyannote_model", ""),
+    }
+
+
+def get_openai_client():
+    api_key = get_api_settings().get("openai_api_key", "")
+    if not api_key:
+        return None
+    return OpenAI(api_key=api_key)
+
+
+def get_openai_model() -> str:
+    return get_api_settings().get("openai_model") or ENV_OPENAI_MODEL
+
+
+def get_huggingface_token() -> str:
+    return get_api_settings().get("huggingface_token") or ""
+
+
+def get_pyannote_model() -> str:
+    return get_api_settings().get("pyannote_model") or ENV_PYANNOTE_MODEL
 
 
 # Retorna o nome da pasta de armazenamento.
@@ -430,9 +515,12 @@ def normalize_speaker_labels(diarization_segments: list[dict]) -> tuple[list[dic
 
 # Roda diarização real de áudio com pyannote.audio.
 def run_pyannote_diarization(wav_path: Path, num_speakers=None, min_speakers=None, max_speakers=None) -> list[dict]:
-    if not HUGGINGFACE_TOKEN:
+    huggingface_token = get_huggingface_token()
+    pyannote_model = get_pyannote_model()
+
+    if not huggingface_token:
         raise RuntimeError(
-            "HF_TOKEN ausente. Configure um token da Hugging Face com acesso ao modelo de diarização do pyannote."
+            "Token da Hugging Face ausente. Configure o token em Configurações > APIs e Integrações."
         )
 
     try:
@@ -444,12 +532,12 @@ def run_pyannote_diarization(wav_path: Path, num_speakers=None, min_speakers=Non
 
     try:
         try:
-            pipeline = Pipeline.from_pretrained(PYANNOTE_MODEL, token=HUGGINGFACE_TOKEN)
+            pipeline = Pipeline.from_pretrained(pyannote_model, token=huggingface_token)
         except TypeError:
-            pipeline = Pipeline.from_pretrained(PYANNOTE_MODEL, use_auth_token=HUGGINGFACE_TOKEN)
+            pipeline = Pipeline.from_pretrained(pyannote_model, use_auth_token=huggingface_token)
     except Exception as exc:
         raise RuntimeError(
-            f"não foi possível carregar o modelo de diarização ({PYANNOTE_MODEL}). Verifique token, acesso ao modelo e internet."
+            f"não foi possível carregar o modelo de diarização ({pyannote_model}). Verifique token, acesso ao modelo e internet."
         ) from exc
 
     diarization_kwargs = {}
@@ -562,7 +650,7 @@ def build_speaker_transcript_from_segments(srt_segments: list[dict], diarization
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "tool": "pyannote.audio",
-        "model": PYANNOTE_MODEL,
+        "model": get_pyannote_model(),
         "speakers": speakers,
         "segments": merged_segments,
     }
@@ -1026,8 +1114,9 @@ def run_suggest_cuts_job(project_id: str):
     project_path = get_project_path(project_id)
 
     try:
-        if not client:
-            raise RuntimeError("sem chave")
+        openai_client = get_openai_client()
+        if not openai_client:
+            raise RuntimeError("OpenAI API Key ausente. Configure a chave na tela inicial em Configurações de APIs.")
 
         srt_path = get_transcript_srt_path(project_id)
         if not srt_path.exists():
@@ -1126,8 +1215,8 @@ Formato desejado:
 """
 
         update_job(project_id, "suggest_cuts", build_running_status("suggest_cuts", 45, "Consultando IA..."))
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
+        response = openai_client.chat.completions.create(
+            model=get_openai_model(),
             temperature=0.3,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -1576,9 +1665,88 @@ def setup_storage():
 
 @app.route("/reset_storage_config", methods=["POST"])
 def reset_storage_config():
-    if CONFIG_PATH.exists():
-        CONFIG_PATH.unlink()
+    save_app_config({"storage_folder_name": DEFAULT_STORAGE_FOLDER_NAME})
     return redirect(url_for("home"))
+
+
+@app.route("/settings")
+def settings_page():
+    return render_template(
+        "settings.html",
+        api_settings=get_public_api_settings(),
+        openai_model_options=OPENAI_MODEL_OPTIONS,
+        pyannote_model_options=PYANNOTE_MODEL_OPTIONS,
+    )
+
+
+@app.route("/save_api_settings", methods=["POST"])
+def save_api_settings():
+    current = get_api_settings()
+
+    openai_api_key = request.form.get("openai_api_key", "").strip()
+    openai_model = request.form.get("openai_model", "").strip()
+    huggingface_token = request.form.get("huggingface_token", "").strip()
+    pyannote_model = request.form.get("pyannote_model", "").strip()
+
+    allowed_openai_models = {item["value"] for item in OPENAI_MODEL_OPTIONS}
+    allowed_pyannote_models = {item["value"] for item in PYANNOTE_MODEL_OPTIONS}
+
+    if openai_model not in allowed_openai_models:
+        openai_model = ENV_OPENAI_MODEL if ENV_OPENAI_MODEL in allowed_openai_models else OPENAI_MODEL_OPTIONS[0]["value"]
+
+    if pyannote_model not in allowed_pyannote_models:
+        pyannote_model = ENV_PYANNOTE_MODEL if ENV_PYANNOTE_MODEL in allowed_pyannote_models else PYANNOTE_MODEL_OPTIONS[0]["value"]
+
+    updated = {
+        "openai_api_key": "" if request.form.get("clear_openai_api_key") == "1" else (openai_api_key or current.get("openai_api_key", "")),
+        "openai_model": openai_model,
+        "huggingface_token": "" if request.form.get("clear_huggingface_token") == "1" else (huggingface_token or current.get("huggingface_token", "")),
+        "pyannote_model": pyannote_model,
+    }
+
+    save_app_config({"api_settings": updated})
+    return redirect(url_for("settings_page", saved="1"))
+
+
+@app.route("/test_api_settings/<provider>", methods=["POST"])
+def test_api_settings(provider):
+    try:
+        if provider == "openai":
+            openai_client = get_openai_client()
+            if not openai_client:
+                raise RuntimeError("OpenAI API Key não configurada.")
+            openai_client.models.list()
+            message = "OpenAI conectada com sucesso."
+
+        elif provider == "huggingface":
+            settings = get_api_settings()
+            token = settings.get("huggingface_token", "")
+            model = settings.get("pyannote_model", "")
+            if not token:
+                raise RuntimeError("Hugging Face Token não configurado.")
+            if not model:
+                raise RuntimeError("Modelo pyannote não configurado.")
+
+            try:
+                from huggingface_hub import HfApi
+            except ImportError as exc:
+                raise RuntimeError("huggingface_hub não está instalado.") from exc
+
+            HfApi().model_info(model, token=token)
+            message = "Hugging Face conectada com sucesso."
+
+        else:
+            raise ValueError("Provedor inválido.")
+
+        if is_ajax_request():
+            return jsonify({"ok": True, "message": message})
+        return redirect(url_for("settings_page", api_test=message))
+
+    except Exception as e:
+        message = str(e)
+        if is_ajax_request():
+            return jsonify({"ok": False, "message": message}), 400
+        return redirect(url_for("settings_page", api_error=message))
 
 
 @app.route("/open_project_folder/<project_id>", methods=["POST"])
