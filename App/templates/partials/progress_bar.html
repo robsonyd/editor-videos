@@ -1,11 +1,24 @@
 <div class="progress-panel" id="progress-panel" hidden>
-  <div class="progress-header">
-    <strong id="progress-title">Processando...</strong>
-    <span id="progress-percent">0%</span>
+  <div class="progress-inner">
+    <div class="progress-header">
+      <div class="progress-title-wrap">
+        <span class="progress-dot" aria-hidden="true"></span>
+        <strong id="progress-title">Processando...</strong>
+      </div>
+      <div class="progress-meta">
+        <span id="progress-elapsed">00:00</span>
+        <span id="progress-percent">0%</span>
+      </div>
+    </div>
+
+    <div class="progress-track" aria-hidden="true">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+
+    <div class="progress-body">
+      <p class="progress-message" id="progress-message">Preparando...</p>
+      <p class="progress-detail" id="progress-detail"></p>
+      <p class="progress-hint" id="progress-hint"></p>
+    </div>
   </div>
-  <div class="progress-track" aria-hidden="true">
-    <div class="progress-fill" id="progress-fill"></div>
-  </div>
-  <p class="progress-message" id="progress-message">Preparando...</p>
-  <p class="progress-detail" id="progress-detail"></p>
 </div>

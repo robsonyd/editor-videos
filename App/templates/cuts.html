@@ -112,6 +112,79 @@
       gap: 16px;
       margin-bottom: 18px;
     }
+    .speaker-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+      margin: 16px 0;
+    }
+    .speaker-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 14px;
+      background: #fafafa;
+    }
+    .speaker-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .speaker-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #3730a3;
+      border: 1px solid #c7d2fe;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .speaker-meta {
+      color: #4b5563;
+      font-size: 13px;
+      line-height: 1.5;
+      margin: 8px 0 0;
+    }
+    .speaker-audio-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .speaker-audio-button {
+      margin-top: 0;
+      padding: 9px 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      background: #111827;
+      white-space: nowrap;
+    }
+    .speaker-audio-button:hover {
+      background: #374151;
+    }
+    .speaker-audio-hint {
+      color: #6b7280;
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .speaker-checkbox {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #fafafa;
+    }
+    .prompt-textarea {
+      min-height: 110px;
+      font-family: Arial, sans-serif;
+      resize: vertical;
+    }
     .cut-list {
       list-style: none;
       padding: 0;
@@ -317,6 +390,7 @@
 
     @media (max-width: 860px) {
       .cut-row { grid-template-columns: 1fr; }
+      .manual-segment-row { grid-template-columns: 1fr !important; }
       .margin-grid { grid-template-columns: 1fr; }
       .cut-item { grid-template-columns: auto 1fr; }
       .cut-item-actions { justify-content: flex-start; grid-column: 2; }
@@ -371,6 +445,14 @@
               <span class="hint">Escolha Instagram, YouTube, TikTok ou LinkedIn e corte na duração ideal.</span>
             </span>
           </label>
+
+          <label style="display:flex; gap:10px; align-items:flex-start;">
+            <input type="radio" name="split_mode" value="manual_segments">
+            <span>
+              <strong>Pinçar trechos manualmente</strong><br>
+              <span class="hint">Defina início e fim de um ou vários trechos específicos.</span>
+            </span>
+          </label>
         </div>
 
         <div class="section-divider"></div>
@@ -420,6 +502,34 @@
           <p class="hint">O splitter vai gerar partes sequenciais com a duração escolhida para esse formato.</p>
         </div>
 
+        <div id="manual-segments-fields" style="display:none;">
+          <h3>Pinçar trechos manualmente</h3>
+          <p class="hint">Adicione quantos trechos quiser. O nome é opcional.</p>
+
+          <div id="manual-segments-list">
+            <div class="manual-segment-row" style="display:grid; grid-template-columns: 160px 160px 1fr auto; gap:16px; margin-bottom:16px; align-items:end;">
+              <div class="time-field">
+                <label>Início</label>
+                <input type="time" step="1" name="split_manual_start[]">
+                <small>Formato: hh:mm:ss</small>
+              </div>
+              <div class="time-field">
+                <label>Fim</label>
+                <input type="time" step="1" name="split_manual_end[]">
+                <small>Formato: hh:mm:ss</small>
+              </div>
+              <div class="name-field">
+                <label>Nome do corte</label>
+                <input type="text" name="split_manual_name[]" placeholder="Ex: Trecho principal">
+                <small>Opcional</small>
+              </div>
+              <button type="button" data-remove-manual-segment="true" class="delete-button" title="Remover">🗑️</button>
+            </div>
+          </div>
+
+          <button type="button" id="add-manual-segment-button" class="secondary-button">Adicionar outro trecho</button>
+        </div>
+
         <button type="submit">Processar divisão</button>
       </form>
 
@@ -457,6 +567,9 @@
         const durationSelect = document.getElementById('split-duration-select');
         const customField = document.getElementById('custom-duration-field');
         const socialFields = document.getElementById('social-preset-fields');
+        const manualFields = document.getElementById('manual-segments-fields');
+        const manualList = document.getElementById('manual-segments-list');
+        const addManualSegmentButton = document.getElementById('add-manual-segment-button');
         const socialPlatform = document.getElementById('split-social-platform');
         const socialFormat = document.getElementById('split-social-format');
         const socialDuration = document.getElementById('split-social-duration');
@@ -542,11 +655,60 @@
           if (fixedFields) fixedFields.style.display = mode === 'fixed_duration' ? 'block' : 'none';
           if (partsFields) partsFields.style.display = mode === 'by_parts' ? 'block' : 'none';
           if (socialFields) socialFields.style.display = mode === 'social_preset' ? 'block' : 'none';
+          if (manualFields) manualFields.style.display = mode === 'manual_segments' ? 'block' : 'none';
         }
 
         function refreshCustomDuration() {
           if (!durationSelect || !customField) return;
           customField.style.display = durationSelect.value === 'custom' ? 'block' : 'none';
+        }
+
+        function addManualSegmentRow() {
+          if (!manualList) return;
+          const row = document.createElement('div');
+          row.className = 'manual-segment-row';
+          row.style.cssText = 'display:grid; grid-template-columns: 160px 160px 1fr auto; gap:16px; margin-bottom:16px; align-items:end;';
+          row.innerHTML = `
+            <div class="time-field">
+              <label>Início</label>
+              <input type="time" step="1" name="split_manual_start[]">
+              <small>Formato: hh:mm:ss</small>
+            </div>
+            <div class="time-field">
+              <label>Fim</label>
+              <input type="time" step="1" name="split_manual_end[]">
+              <small>Formato: hh:mm:ss</small>
+            </div>
+            <div class="name-field">
+              <label>Nome do corte</label>
+              <input type="text" name="split_manual_name[]" placeholder="Ex: Trecho principal">
+              <small>Opcional</small>
+            </div>
+            <button type="button" data-remove-manual-segment="true" class="delete-button" title="Remover">🗑️</button>
+          `;
+          manualList.appendChild(row);
+        }
+
+        function clearManualSegmentRow(row) {
+          row.querySelectorAll('input').forEach(input => input.value = '');
+        }
+
+        if (addManualSegmentButton) {
+          addManualSegmentButton.addEventListener('click', addManualSegmentRow);
+        }
+
+        if (manualList) {
+          manualList.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-remove-manual-segment="true"]');
+            if (!button) return;
+            const row = button.closest('.manual-segment-row');
+            const rows = manualList.querySelectorAll('.manual-segment-row');
+            if (rows.length <= 1) {
+              clearManualSegmentRow(row);
+              return;
+            }
+            row.remove();
+          });
         }
 
         modeInputs.forEach(input => input.addEventListener('change', refreshMode));
@@ -603,13 +765,136 @@
   </div>
 
   <div class="box">
-    <h2>3. Sugerir cortes com IA</h2>
+    <h2>3. Identificação de speakers</h2>
+    <p class="hint">Esta etapa usa diarização de áudio para identificar quem fala em cada trecho. Não é uma análise apenas do texto.</p>
+
+    {% if transcript_srt_text %}
+      <form action="{{ url_for('identify_speakers', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="identify_speakers" data-project-id="{{ project_id }}" data-keep-scroll="true">
+        <input type="hidden" name="scroll_y" value="0">
+
+        <h3>Configuração opcional</h3>
+        <p class="hint">Se você souber quantas pessoas falam no vídeo, informe abaixo. Isso costuma melhorar a diarização.</p>
+
+        <div class="margin-grid">
+          <div class="margin-field">
+            <label for="num_speakers"><strong>Número exato de speakers</strong></label>
+            <input type="number" id="num_speakers" name="num_speakers" min="1" step="1" value="{{ speaker_settings.get('num_speakers', '') if speaker_settings else '' }}" placeholder="Ex: 2">
+            <small>Use quando souber exatamente quantas pessoas falam.</small>
+          </div>
+
+          <div class="margin-field">
+            <label><strong>Intervalo estimado</strong></label>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <input type="number" name="min_speakers" min="1" step="1" value="{{ speaker_settings.get('min_speakers', '') if speaker_settings else '' }}" placeholder="Mín.">
+              <input type="number" name="max_speakers" min="1" step="1" value="{{ speaker_settings.get('max_speakers', '') if speaker_settings else '' }}" placeholder="Máx.">
+            </div>
+            <small>Use quando não souber exatamente. Ex: mínimo 2, máximo 4.</small>
+          </div>
+        </div>
+
+        <button type="submit">Identificar speakers</button>
+      </form>
+    {% else %}
+      <button disabled>Identificar speakers</button>
+      <p class="hint">Gere a transcrição com marcadores de tempo primeiro.</p>
+    {% endif %}
+
+    {% if speaker_transcript and speaker_transcript.get("speakers") %}
+      <div class="section-divider"></div>
+      <h3>Speakers encontrados</h3>
+      <p class="hint">Use a amostra de áudio para identificar cada pessoa, renomeie os speakers e salve antes de pedir os cortes.</p>
+
+      <form action="{{ url_for('save_speaker_settings', project_id=project_id) }}" method="POST" data-keep-scroll="true">
+        <input type="hidden" name="scroll_y" value="0">
+        <div class="speaker-grid">
+          {% for speaker in speaker_transcript.get("speakers", []) %}
+            <div class="speaker-card">
+              <div class="speaker-card-header">
+                <strong>{{ speaker.id }}</strong>
+                <span class="speaker-pill">{{ speaker.percentage }}%</span>
+              </div>
+              <label for="speaker_name_{{ speaker.id }}"><strong>Nome opcional</strong></label>
+              <input type="text" id="speaker_name_{{ speaker.id }}" name="speaker_name_{{ speaker.id }}" value="{{ speaker.name }}" placeholder="Ex: Robson, Host, Convidado">
+              <div class="speaker-audio-row">
+                <button type="button" class="speaker-audio-button" data-speaker-audio-button data-audio-id="speaker_audio_{{ speaker.id }}">▶ Reproduzir amostra</button>
+                <span class="speaker-audio-hint">Amostra curta para identificar a voz</span>
+                <audio id="speaker_audio_{{ speaker.id }}" preload="none" src="{{ url_for('speaker_sample', project_id=project_id, speaker_id=speaker.id) }}"></audio>
+              </div>
+              <p class="speaker-meta">{{ speaker.segments }} trecho(s) · {{ speaker.seconds }} segundo(s) estimados</p>
+            </div>
+          {% endfor %}
+        </div>
+        <button type="submit">Salvar nomes dos speakers</button>
+      </form>
+
+      <script>
+        (function () {
+          const buttons = document.querySelectorAll('[data-speaker-audio-button]');
+          buttons.forEach((button) => {
+            const audio = document.getElementById(button.dataset.audioId);
+            if (!audio) return;
+
+            audio.addEventListener('ended', () => {
+              button.textContent = '▶ Reproduzir amostra';
+            });
+
+            button.addEventListener('click', () => {
+              document.querySelectorAll('[data-speaker-audio-button]').forEach((otherButton) => {
+                const otherAudio = document.getElementById(otherButton.dataset.audioId);
+                if (otherAudio && otherAudio !== audio) {
+                  otherAudio.pause();
+                  otherAudio.currentTime = 0;
+                  otherButton.textContent = '▶ Reproduzir amostra';
+                }
+              });
+
+              if (audio.paused) {
+                audio.play();
+                button.textContent = '⏸ Parar amostra';
+              } else {
+                audio.pause();
+                audio.currentTime = 0;
+                button.textContent = '▶ Reproduzir amostra';
+              }
+            });
+          });
+        })();
+      </script>
+
+      <h3 style="margin-top: 20px;">Transcrição com speakers</h3>
+      <textarea readonly>{% for segment in speaker_transcript.get("segments", []) %}[{{ segment.start }} - {{ segment.end }}] {{ segment.speaker_name or segment.speaker }}: {{ segment.text }}
+{% endfor %}</textarea>
+    {% endif %}
+  </div>
+
+  <div class="box">
+    <h2>4. Sugerir cortes com IA</h2>
     {% if transcript_srt_text %}
       <form action="{{ url_for('suggest_cuts', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="suggest_cuts" data-project-id="{{ project_id }}" data-keep-scroll="true">
         <input type="hidden" name="scroll_y" value="0">
+
+        {% if speaker_transcript and speaker_transcript.get("speakers") %}
+          <h3>Escolha os speakers para análise</h3>
+          <p class="hint">Se nenhum speaker for marcado, a IA analisará todos os speakers identificados.</p>
+          <div class="speaker-grid">
+            {% for speaker in speaker_transcript.get("speakers", []) %}
+              <label class="speaker-checkbox">
+                <input type="checkbox" name="selected_speakers" value="{{ speaker.id }}" {% if ai_request and speaker.id in ai_request.get("selected_speakers", []) %}checked{% endif %}>
+                <span>
+                  <strong>{{ speaker.name or speaker.id }}</strong><br>
+                  <span class="hint">{{ speaker.id }} · {{ speaker.percentage }}% do conteúdo falado</span>
+                </span>
+              </label>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <h3>Pedido livre para a IA</h3>
+        <textarea class="prompt-textarea" name="free_prompt" placeholder="Ex: Nesse episódio eu falei várias vezes sobre precificação. Quero cortes estratégicos, com opinião forte, sobre esse assunto.">{{ ai_request.get("free_prompt", "") if ai_request else "" }}</textarea>
+
         <button type="submit">Sugerir cortes com IA</button>
       </form>
-      <p class="hint">A IA vai sugerir pares de <strong>conteúdo + gancho</strong> com base na transcrição com timestamps.</p>
+      <p class="hint">A IA vai sugerir pares de <strong>conteúdo + gancho</strong> com base na transcrição, speakers selecionados e pedido livre.</p>
     {% else %}
       <button disabled>Sugerir cortes com IA</button>
       <p class="hint">Gere a transcrição com marcadores de tempo primeiro.</p>
@@ -617,7 +902,7 @@
   </div>
 
   <div class="box" id="section-4">
-    <h2>4. Sugestões da IA</h2>
+    <h2>5. Sugestões da IA</h2>
     {% if ai_suggestions and ai_suggestions.get("cuts") %}
       <form action="{{ url_for('use_ai_cuts', project_id=project_id) }}" method="POST" data-keep-scroll="true">
         <input type="hidden" name="scroll_y" value="0">
@@ -656,7 +941,7 @@
   </div>
 
   <div class="box" id="section-5">
-    <h2>5. Definir cortes manualmente</h2>
+    <h2>6. Definir cortes manualmente</h2>
     {% if metadata.get("transcription_generated") == "yes" %}
       <form id="define-cuts-form" action="{{ url_for('save_cuts', project_id=project_id) }}" method="POST" data-keep-scroll="true">
         <input type="hidden" name="scroll_y" value="0">
@@ -774,7 +1059,7 @@
   </div>
 
   <div class="box" id="section-6">
-    <h2>6. Cortes definidos</h2>
+    <h2>7. Cortes definidos</h2>
     {% if cuts %}
       <ul class="cut-list">
         {% for cut in cuts %}
@@ -801,7 +1086,7 @@
   </div>
 
   <div class="box" id="section-7">
-    <h2>7. Processar cortes</h2>
+    <h2>8. Processar cortes</h2>
     {% if metadata.get("cuts_defined") == "yes" %}
       <form action="{{ url_for('process_cuts', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="process_cuts" data-project-id="{{ project_id }}" data-keep-scroll="true">
         <input type="hidden" name="scroll_y" value="0">
@@ -814,7 +1099,7 @@
   </div>
 
   <div class="box" id="section-8">
-    <h2>8. Arquivos processados</h2>
+    <h2>9. Arquivos processados</h2>
     {% if processed_files %}
       <ul>
         {% for file in processed_files %}
@@ -892,6 +1177,7 @@
         const progressDetail = document.getElementById('progress-detail');
         const titles = {
           generate_transcription: 'Gerar transcrição',
+          identify_speakers: 'Identificar speakers',
           suggest_cuts: 'Sugerir cortes com IA',
           process_cuts: 'Processar cortes'
         };

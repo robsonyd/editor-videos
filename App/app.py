@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
 from openai import OpenAI
 
 from utils.error_handlers import build_error_title, humanize_error
@@ -28,6 +28,8 @@ os.environ["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH"
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
+HUGGINGFACE_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
+PYANNOTE_MODEL = os.getenv("PYANNOTE_MODEL", "pyannote/speaker-diarization-community-1")
 
 client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
@@ -44,7 +46,7 @@ PROJECT_PUBLIC_SUBFOLDERS = ["Videos Finalizados"]
 WHISPER_CLI_PATH = BASE_DIR / "whisper.cpp" / "build" / "bin" / "whisper-cli"
 WHISPER_MODEL_PATH = BASE_DIR / "Modelos" / "ggml-base.bin"
 
-JOB_TYPES = ["generate_transcription", "suggest_cuts", "process_cuts", "split_video"]
+JOB_TYPES = ["generate_transcription", "identify_speakers", "suggest_cuts", "process_cuts", "split_video"]
 
 SPLIT_SOCIAL_PRESETS = {
     "instagram": {
@@ -209,6 +211,39 @@ def get_ai_suggestions_path(project_id: str) -> Path:
     return get_project_subdir(project_id, "Dados de Processamento") / "ai_suggestions.json"
 
 
+# Retorna o caminho do pedido livre enviado para a IA.
+def get_ai_request_path(project_id: str) -> Path:
+    return get_project_subdir(project_id, "Dados de Processamento") / "ai_request.json"
+
+
+# Retorna o caminho da transcrição enriquecida com speakers.
+def get_speaker_transcript_path(project_id: str) -> Path:
+    return get_project_subdir(project_id, "Dados de Processamento") / "speaker_transcript.json"
+
+
+# Retorna as configurações usadas na identificação de speakers.
+def get_speaker_settings_path(project_id: str) -> Path:
+    return get_project_subdir(project_id, "Dados de Processamento") / "speaker_settings.json"
+
+
+# Retorna a pasta de amostras de áudio dos speakers.
+def get_speaker_samples_dir(project_id: str) -> Path:
+    path = get_project_subdir(project_id, "Dados de Processamento") / "Amostras de Speakers"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+# Retorna o caminho cacheado de uma amostra de speaker.
+def get_speaker_sample_path(project_id: str, speaker_id: str) -> Path:
+    safe_speaker = sanitize_filename(speaker_id).replace(" ", "_")
+    return get_speaker_samples_dir(project_id) / f"{safe_speaker}.wav"
+
+
+# Retorna o caminho dos trechos manuais do Video Splitter.
+def get_split_manual_segments_path(project_id: str) -> Path:
+    return get_project_subdir(project_id, "Dados de Processamento") / "split_manual_segments.json"
+
+
 # Retorna o caminho base dos arquivos de transcrição.
 def get_transcript_txt_path(project_id: str) -> Path:
     return get_project_subdir(project_id, "Transcrições") / f"{project_id}_transcricao.txt"
@@ -299,12 +334,270 @@ def parse_time_to_seconds(value: str) -> int:
 
 
 # Converte segundos em HH:MM:SS.
+
+
+# Converte tempo de speaker/SRT em segundos com suporte a milissegundos.
+def parse_timestamp_to_float_seconds(value: str) -> float:
+    value = (value or "").strip().replace(",", ".")
+    parts = value.split(":")
+    if len(parts) != 3:
+        raise ValueError("tempo inválido")
+    hours = int(parts[0])
+    minutes = int(parts[1])
+    seconds = float(parts[2])
+    return hours * 3600 + minutes * 60 + seconds
+
 def format_seconds_to_time(total_seconds: int) -> str:
     total_seconds = max(0, int(total_seconds))
     hours = total_seconds // 3600
     minutes = (total_seconds % 3600) // 60
     seconds = total_seconds % 60
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+SRT_TIME_RANGE_PATTERN = re.compile(
+    r"(?P<start>\d{2}:\d{2}:\d{2}[,.]\d{3})\s+-->\s+(?P<end>\d{2}:\d{2}:\d{2}[,.]\d{3})"
+)
+
+
+# Converte tempo SRT HH:MM:SS,mmm em segundos.
+def parse_srt_time_to_seconds(value: str) -> float:
+    value = value.strip().replace(",", ".")
+    time_part, millis_part = value.split(".", 1)
+    hours, minutes, seconds = [int(part) for part in time_part.split(":")]
+    return hours * 3600 + minutes * 60 + seconds + (int(millis_part[:3]) / 1000)
+
+
+# Lê o SRT do Whisper e transforma em segmentos estruturados.
+def parse_srt_segments(srt_text: str) -> list[dict]:
+    segments = []
+    blocks = re.split(r"\n\s*\n", srt_text.strip())
+
+    for block in blocks:
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if len(lines) < 2:
+            continue
+
+        time_line_index = next((idx for idx, line in enumerate(lines) if "-->" in line), None)
+        if time_line_index is None:
+            continue
+
+        match = SRT_TIME_RANGE_PATTERN.search(lines[time_line_index])
+        if not match:
+            continue
+
+        text = " ".join(lines[time_line_index + 1:]).strip()
+        if not text:
+            continue
+
+        start_seconds = parse_srt_time_to_seconds(match.group("start"))
+        end_seconds = parse_srt_time_to_seconds(match.group("end"))
+        if end_seconds <= start_seconds:
+            continue
+
+        segments.append(
+            {
+                "start_seconds": round(start_seconds, 3),
+                "end_seconds": round(end_seconds, 3),
+                "start": format_seconds_to_time(start_seconds),
+                "end": format_seconds_to_time(end_seconds),
+                "text": text,
+            }
+        )
+
+    return segments
+
+
+# Calcula a intersecção entre dois intervalos em segundos.
+def calculate_overlap(start_a: float, end_a: float, start_b: float, end_b: float) -> float:
+    return max(0.0, min(end_a, end_b) - max(start_a, start_b))
+
+
+# Normaliza labels retornados pela diarização para SPEAKER_01, SPEAKER_02 etc.
+def normalize_speaker_labels(diarization_segments: list[dict]) -> tuple[list[dict], dict]:
+    mapping = {}
+    next_index = 1
+
+    for segment in diarization_segments:
+        raw_speaker = str(segment.get("speaker") or "SPEAKER")
+        if raw_speaker not in mapping:
+            mapping[raw_speaker] = f"SPEAKER_{next_index:02d}"
+            next_index += 1
+        segment["speaker"] = mapping[raw_speaker]
+
+    return diarization_segments, mapping
+
+
+# Roda diarização real de áudio com pyannote.audio.
+def run_pyannote_diarization(wav_path: Path, num_speakers=None, min_speakers=None, max_speakers=None) -> list[dict]:
+    if not HUGGINGFACE_TOKEN:
+        raise RuntimeError(
+            "HF_TOKEN ausente. Configure um token da Hugging Face com acesso ao modelo de diarização do pyannote."
+        )
+
+    try:
+        from pyannote.audio import Pipeline
+    except ImportError as exc:
+        raise RuntimeError(
+            "pyannote.audio não está instalado. Instale as dependências de diarização antes de identificar speakers."
+        ) from exc
+
+    try:
+        try:
+            pipeline = Pipeline.from_pretrained(PYANNOTE_MODEL, token=HUGGINGFACE_TOKEN)
+        except TypeError:
+            pipeline = Pipeline.from_pretrained(PYANNOTE_MODEL, use_auth_token=HUGGINGFACE_TOKEN)
+    except Exception as exc:
+        raise RuntimeError(
+            f"não foi possível carregar o modelo de diarização ({PYANNOTE_MODEL}). Verifique token, acesso ao modelo e internet."
+        ) from exc
+
+    diarization_kwargs = {}
+    if num_speakers:
+        diarization_kwargs["num_speakers"] = int(num_speakers)
+    else:
+        if min_speakers:
+            diarization_kwargs["min_speakers"] = int(min_speakers)
+        if max_speakers:
+            diarization_kwargs["max_speakers"] = int(max_speakers)
+
+    diarization_output = pipeline(str(wav_path), **diarization_kwargs)
+
+    # pyannote.audio 4.x retorna um DiarizeOutput.
+    # A Annotation real fica em output.speaker_diarization.
+    diarization = getattr(diarization_output, "speaker_diarization", diarization_output)
+
+    segments = []
+
+    if hasattr(diarization, "itertracks"):
+        iterable = diarization.itertracks(yield_label=True)
+        for turn, _, speaker in iterable:
+            if turn.end <= turn.start:
+                continue
+            segments.append(
+                {
+                    "speaker": str(speaker),
+                    "start_seconds": round(float(turn.start), 3),
+                    "end_seconds": round(float(turn.end), 3),
+                    "start": format_seconds_to_time(turn.start),
+                    "end": format_seconds_to_time(turn.end),
+                }
+            )
+    else:
+        # Fallback compatível com alguns outputs novos que iteram como (turn, speaker).
+        for item in diarization:
+            if len(item) == 2:
+                turn, speaker = item
+            elif len(item) == 3:
+                turn, _, speaker = item
+            else:
+                continue
+
+            if turn.end <= turn.start:
+                continue
+            segments.append(
+                {
+                    "speaker": str(speaker),
+                    "start_seconds": round(float(turn.start), 3),
+                    "end_seconds": round(float(turn.end), 3),
+                    "start": format_seconds_to_time(turn.start),
+                    "end": format_seconds_to_time(turn.end),
+                }
+            )
+
+    segments, _ = normalize_speaker_labels(segments)
+    return segments
+
+
+# Encontra o speaker mais provável para um segmento de texto por sobreposição de tempo.
+def find_best_speaker_for_text_segment(text_segment: dict, diarization_segments: list[dict]) -> tuple[str, float]:
+    scores = {}
+    for diar_segment in diarization_segments:
+        overlap = calculate_overlap(
+            float(text_segment["start_seconds"]),
+            float(text_segment["end_seconds"]),
+            float(diar_segment["start_seconds"]),
+            float(diar_segment["end_seconds"]),
+        )
+        if overlap > 0:
+            speaker = diar_segment.get("speaker", "SPEAKER_00")
+            scores[speaker] = scores.get(speaker, 0.0) + overlap
+
+    if not scores:
+        return "SPEAKER_UNKNOWN", 0.0
+
+    best_speaker, best_overlap = max(scores.items(), key=lambda item: item[1])
+    segment_duration = max(0.001, float(text_segment["end_seconds"]) - float(text_segment["start_seconds"]))
+    confidence = min(1.0, best_overlap / segment_duration)
+    return best_speaker, round(confidence, 3)
+
+
+# Combina segmentos SRT com a diarização de áudio.
+def build_speaker_transcript_from_segments(srt_segments: list[dict], diarization_segments: list[dict]) -> dict:
+    merged_segments = []
+    speaker_stats = {}
+
+    for text_segment in srt_segments:
+        speaker, confidence = find_best_speaker_for_text_segment(text_segment, diarization_segments)
+        segment = dict(text_segment)
+        segment["speaker"] = speaker
+        segment["speaker_name"] = ""
+        segment["confidence"] = confidence
+        merged_segments.append(segment)
+
+        duration = max(0.0, float(segment["end_seconds"]) - float(segment["start_seconds"]))
+        if speaker not in speaker_stats:
+            speaker_stats[speaker] = {"id": speaker, "name": "", "segments": 0, "seconds": 0.0}
+        speaker_stats[speaker]["segments"] += 1
+        speaker_stats[speaker]["seconds"] += duration
+
+    total_seconds = sum(item["seconds"] for item in speaker_stats.values()) or 1.0
+    speakers = []
+    for speaker_id in sorted(speaker_stats):
+        item = speaker_stats[speaker_id]
+        item["seconds"] = round(item["seconds"], 2)
+        item["percentage"] = round((item["seconds"] / total_seconds) * 100, 1)
+        speakers.append(item)
+
+    return {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "tool": "pyannote.audio",
+        "model": PYANNOTE_MODEL,
+        "speakers": speakers,
+        "segments": merged_segments,
+    }
+
+
+# Atualiza nomes amigáveis dos speakers dentro do JSON.
+def apply_speaker_names(speaker_transcript: dict, names_by_id: dict) -> dict:
+    names_by_id = {key: value.strip() for key, value in names_by_id.items() if value.strip()}
+
+    for speaker in speaker_transcript.get("speakers", []):
+        speaker_id = speaker.get("id", "")
+        speaker["name"] = names_by_id.get(speaker_id, speaker.get("name", ""))
+
+    for segment in speaker_transcript.get("segments", []):
+        speaker_id = segment.get("speaker", "")
+        segment["speaker_name"] = names_by_id.get(speaker_id, segment.get("speaker_name", ""))
+
+    return speaker_transcript
+
+
+# Monta transcrição com speakers para a IA.
+def build_ai_transcript_from_speakers(speaker_transcript: dict, selected_speakers: list[str] | None = None) -> str:
+    selected = set(selected_speakers or [])
+    speaker_names = {speaker.get("id"): speaker.get("name", "") for speaker in speaker_transcript.get("speakers", [])}
+    lines = []
+
+    for segment in speaker_transcript.get("segments", []):
+        speaker_id = segment.get("speaker", "")
+        if selected and speaker_id not in selected:
+            continue
+
+        display_name = speaker_names.get(speaker_id) or segment.get("speaker_name") or speaker_id
+        lines.append(f"[{segment.get('start')} - {segment.get('end')}] {display_name}: {segment.get('text', '')}")
+
+    return "\n".join(lines).strip()
 
 
 # Lê uma margem numérica em segundos.
@@ -342,6 +635,77 @@ def load_ai_suggestions(project_id: str) -> dict:
         with suggestions_path.open("r", encoding="utf-8") as f:
             return json.load(f)
     return {"cuts": []}
+
+
+# Carrega o último pedido livre enviado para a IA.
+def load_ai_request(project_id: str) -> dict:
+    request_path = get_ai_request_path(project_id)
+    if request_path.exists():
+        try:
+            with request_path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+# Salva o pedido livre enviado para a IA.
+def save_ai_request(project_id: str, data: dict):
+    request_path = get_ai_request_path(project_id)
+    with request_path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+# Carrega a transcrição enriquecida com speakers.
+def load_speaker_transcript(project_id: str) -> dict:
+    speaker_path = get_speaker_transcript_path(project_id)
+    if speaker_path.exists():
+        try:
+            with speaker_path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+# Salva a transcrição enriquecida com speakers.
+def save_speaker_transcript(project_id: str, data: dict):
+    speaker_path = get_speaker_transcript_path(project_id)
+    with speaker_path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+# Carrega as configurações usadas na diarização.
+def load_speaker_settings(project_id: str) -> dict:
+    path = get_speaker_settings_path(project_id)
+    if path.exists():
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+
+# Salva as configurações usadas na diarização.
+def save_speaker_settings_data(project_id: str, data: dict):
+    path = get_speaker_settings_path(project_id)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+# Lê inteiro opcional vindo de formulário/config.
+def parse_optional_positive_int(value):
+    value = str(value or "").strip()
+    if not value:
+        return None
+    number = int(value)
+    if number <= 0:
+        return None
+    return number
 
 
 # Carrega as sugestões selecionadas para a seção 5.
@@ -564,6 +928,98 @@ def run_generate_transcription_job(project_id: str):
         fail_job(project_id, "generate_transcription", str(e))
 
 
+# Executa a identificação de speakers em segundo plano.
+def run_identify_speakers_job(project_id: str):
+    metadata = load_metadata(project_id)
+    video_path = metadata.get("video_path", "")
+
+    try:
+        srt_path = get_transcript_srt_path(project_id)
+        if not srt_path.exists():
+            raise FileNotFoundError("transcrição SRT ausente")
+
+        wav_path = get_project_subdir(project_id, "Audios") / f"{project_id}.wav"
+        if not wav_path.exists():
+            if not video_path or not Path(video_path).exists():
+                raise FileNotFoundError("áudio e vídeo ausentes")
+
+            update_job(project_id, "identify_speakers", build_running_status("identify_speakers", 8, "Preparando áudio para diarização..."))
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    video_path,
+                    "-ar",
+                    "16000",
+                    "-ac",
+                    "1",
+                    "-c:a",
+                    "pcm_s16le",
+                    str(wav_path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        update_job(project_id, "identify_speakers", build_running_status("identify_speakers", 20, "Lendo transcrição com timestamps..."))
+        srt_text = srt_path.read_text(encoding="utf-8")
+        srt_segments = parse_srt_segments(srt_text)
+        if not srt_segments:
+            raise RuntimeError("nenhum segmento válido encontrado no SRT")
+
+        speaker_settings = load_speaker_settings(project_id)
+        num_speakers = parse_optional_positive_int(speaker_settings.get("num_speakers"))
+        min_speakers = parse_optional_positive_int(speaker_settings.get("min_speakers"))
+        max_speakers = parse_optional_positive_int(speaker_settings.get("max_speakers"))
+
+        detail_parts = []
+        if num_speakers:
+            detail_parts.append(f"número esperado: {num_speakers}")
+        else:
+            if min_speakers:
+                detail_parts.append(f"mínimo: {min_speakers}")
+            if max_speakers:
+                detail_parts.append(f"máximo: {max_speakers}")
+        detail = " · ".join(detail_parts) if detail_parts else "Sem número de speakers definido."
+
+        update_job(project_id, "identify_speakers", build_running_status("identify_speakers", 45, "Identificando speakers pelo áudio...", detail))
+        diarization_segments = run_pyannote_diarization(
+            wav_path,
+            num_speakers=num_speakers,
+            min_speakers=min_speakers,
+            max_speakers=max_speakers,
+        )
+        if not diarization_segments:
+            raise RuntimeError("nenhum speaker identificado")
+
+        update_job(project_id, "identify_speakers", build_running_status("identify_speakers", 82, "Combinando speakers com a transcrição..."))
+        speaker_transcript = build_speaker_transcript_from_segments(srt_segments, diarization_segments)
+        speaker_transcript["settings"] = speaker_settings
+        save_speaker_transcript(project_id, speaker_transcript)
+
+        speaker_count = len([speaker for speaker in speaker_transcript.get("speakers", []) if speaker.get("id") != "SPEAKER_UNKNOWN"])
+        metadata["speakers_identified"] = "yes"
+        metadata["status"] = f"Speakers identificados: {speaker_count}"
+        save_metadata(project_id, metadata)
+
+        update_job(
+            project_id,
+            "identify_speakers",
+            build_success_status(
+                "identify_speakers",
+                "Speakers identificados",
+                f"A diarização encontrou {speaker_count} speaker(s) e gerou speaker_transcript.json.",
+            ),
+        )
+    except subprocess.CalledProcessError as e:
+        raw = e.stderr or e.stdout or str(e)
+        fail_job(project_id, "identify_speakers", f"ffmpeg falhou: {raw}")
+    except Exception as e:
+        fail_job(project_id, "identify_speakers", str(e))
+
+
 # Executa a sugestão de cortes com IA em segundo plano.
 def run_suggest_cuts_job(project_id: str):
     metadata = load_metadata(project_id)
@@ -577,8 +1033,39 @@ def run_suggest_cuts_job(project_id: str):
         if not srt_path.exists():
             raise FileNotFoundError("sem srt")
 
+        ai_request = load_ai_request(project_id)
+        selected_speakers = ai_request.get("selected_speakers", [])
+        if not isinstance(selected_speakers, list):
+            selected_speakers = []
+        free_prompt = str(ai_request.get("free_prompt", "")).strip()
+
         update_job(project_id, "suggest_cuts", build_running_status("suggest_cuts", 15, "Lendo transcrição..."))
-        srt_text = srt_path.read_text(encoding="utf-8")
+        speaker_transcript = load_speaker_transcript(project_id)
+        speaker_mode_enabled = bool(speaker_transcript.get("segments"))
+
+        if speaker_mode_enabled:
+            transcript_for_ai = build_ai_transcript_from_speakers(speaker_transcript, selected_speakers)
+            if not transcript_for_ai:
+                raise RuntimeError("nenhum trecho disponível para os speakers selecionados")
+
+            speaker_names = {speaker.get("id"): speaker.get("name", "") for speaker in speaker_transcript.get("speakers", [])}
+            selected_labels = []
+            for speaker_id in selected_speakers:
+                selected_labels.append(speaker_names.get(speaker_id) or speaker_id)
+            selected_speakers_text = ", ".join(selected_labels) if selected_labels else "todos os speakers identificados"
+            transcript_label = "Transcrição com speakers"
+            speaker_instruction = f"""
+Filtro de speakers:
+- Speakers selecionados para análise: {selected_speakers_text}.
+- Se houver speakers selecionados, priorize somente as falas deles.
+- Use falas de outros speakers apenas quando forem indispensáveis para entender o contexto, sem transformar essas falas no centro do corte.
+"""
+        else:
+            transcript_for_ai = srt_path.read_text(encoding="utf-8")
+            transcript_label = "Transcrição SRT"
+            speaker_instruction = "Não há diarização disponível. Analise a transcrição inteira."
+
+        user_intent = free_prompt or "Sugira os melhores cortes de conteúdo e ganchos com potencial para redes sociais."
 
         system_prompt = """
 Você é um especialista em edição de vídeos curtos para redes sociais.
@@ -594,6 +1081,8 @@ Regras obrigatórias:
 - O gancho obrigatoriamente deve estar dentro do conteúdo.
 - Pode haver sobreposição parcial entre sugestões.
 - Priorize trechos com clareza, valor, curiosidade, emoção, emoção humana, quebra de padrão, opinião forte ou utilidade prática.
+- Respeite o filtro de speakers quando ele existir.
+- Respeite o pedido livre do usuário.
 - Retorne de 2 a 15 sugestões, se houver material suficiente.
 - Nunca invente tempos inexistentes.
 - Use apenas os timestamps da transcrição como base.
@@ -604,12 +1093,18 @@ Regras obrigatórias:
         user_prompt = f"""
 Analise a transcrição abaixo e sugira pares conteúdo + gancho.
 
+Pedido livre do usuário:
+{user_intent}
+
+{speaker_instruction}
+
 Instruções:
 - Primeiro tente encontrar conteúdos entre 40 e 90 segundos.
 - Se não houver nenhum bom nessa faixa, aceite conteúdos entre 20 e 40 segundos.
 - O gancho deve estar dentro do conteúdo e ter entre 5 e 15 segundos.
 - Retorne de 2 a 15 sugestões se existir material aproveitável.
 - Não invente timestamps.
+- Os cortes devem fazer sentido como vídeos curtos independentes.
 
 Formato desejado:
 {{
@@ -626,8 +1121,8 @@ Formato desejado:
   ]
 }}
 
-Transcrição:
-{srt_text}
+{transcript_label}:
+{transcript_for_ai}
 """
 
         update_job(project_id, "suggest_cuts", build_running_status("suggest_cuts", 45, "Consultando IA..."))
@@ -663,6 +1158,23 @@ Transcrição:
         error_log.write_text(str(e), encoding="utf-8")
         fail_job(project_id, "suggest_cuts", str(e))
 
+
+
+# Carrega os trechos manuais do Video Splitter.
+def load_split_manual_segments(project_id: str) -> list:
+    path = get_split_manual_segments_path(project_id)
+    if path.exists():
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    return []
+
+
+# Salva os trechos manuais do Video Splitter.
+def save_split_manual_segments(project_id: str, segments: list):
+    path = get_split_manual_segments_path(project_id)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(segments, f, ensure_ascii=False, indent=2)
 
 
 # Monta os segmentos do Video Splitter.
@@ -718,9 +1230,54 @@ def run_split_video_job(project_id: str):
             raise ValueError("não foi possível ler a duração do vídeo")
 
         mode = metadata.get("split_mode", "fixed_duration")
-        fixed_seconds = int(float(metadata.get("split_duration_seconds") or 0)) if metadata.get("split_duration_seconds") else None
-        parts = int(metadata.get("split_parts") or 0) if metadata.get("split_parts") else None
-        segments = build_split_segments(duration, mode, fixed_seconds=fixed_seconds, parts=parts)
+        split_items = []
+
+        if mode == "manual_segments":
+            manual_segments = load_split_manual_segments(project_id)
+            if not manual_segments:
+                raise ValueError("nenhum trecho manual definido")
+
+            for index, item in enumerate(manual_segments, start=1):
+                start_time = item.get("start", "").strip()
+                end_time = item.get("end", "").strip()
+                name = sanitize_filename(item.get("name", "") or f"Trecho {index:02d}")
+
+                start_seconds = parse_time_to_seconds(start_time)
+                end_seconds = parse_time_to_seconds(end_time)
+
+                if end_seconds <= start_seconds:
+                    raise ValueError(f"trecho {index} inválido")
+                if start_seconds >= duration:
+                    raise ValueError(f"início do trecho {index} está fora da duração do vídeo")
+
+                end_seconds = min(end_seconds, int(duration))
+                split_items.append(
+                    {
+                        "start_seconds": float(start_seconds),
+                        "end_seconds": float(end_seconds),
+                        "name": name,
+                        "output_base": name,
+                        "label": "trecho",
+                    }
+                )
+        else:
+            fixed_seconds = int(float(metadata.get("split_duration_seconds") or 0)) if metadata.get("split_duration_seconds") else None
+            parts = int(metadata.get("split_parts") or 0) if metadata.get("split_parts") else None
+            segments = build_split_segments(duration, mode, fixed_seconds=fixed_seconds, parts=parts)
+
+            for position, (start_seconds, end_seconds) in enumerate(segments, start=1):
+                split_items.append(
+                    {
+                        "start_seconds": float(start_seconds),
+                        "end_seconds": float(end_seconds),
+                        "name": f"Parte {position:02d}",
+                        "output_base": f"{project_id}_parte_{position:02d}",
+                        "label": "parte",
+                    }
+                )
+
+        if not split_items:
+            raise ValueError("nenhum segmento válido gerado")
 
         output_dir = get_project_subdir(project_id, "Videos Finalizados")
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -740,9 +1297,14 @@ def run_split_video_job(project_id: str):
 
         batch_id = datetime.now().strftime("%Y%m%d%H%M%S")
         generated_cuts = []
-        total = len(segments)
+        total = len(split_items)
 
-        for position, (start_seconds, end_seconds) in enumerate(segments, start=1):
+        for position, item in enumerate(split_items, start=1):
+            start_seconds = item["start_seconds"]
+            end_seconds = item["end_seconds"]
+            segment_name = item["name"]
+            label = item.get("label", "parte")
+
             progress = int(5 + ((position - 1) / total) * 90)
             update_job(
                 project_id,
@@ -750,12 +1312,12 @@ def run_split_video_job(project_id: str):
                 build_running_status(
                     "split_video",
                     progress,
-                    f"Gerando parte {position} de {total}...",
+                    f"Gerando {label} {position} de {total}...",
                     f"{format_seconds_to_time(start_seconds)} até {format_seconds_to_time(end_seconds)}",
                 ),
             )
 
-            output_name = build_unique_output_name(output_dir, f"{project_id}_parte_{position:02d}")
+            output_name = build_unique_output_name(output_dir, item.get("output_base") or segment_name)
             output_file = output_dir / output_name
             segment_duration = max(0.5, end_seconds - start_seconds)
 
@@ -790,7 +1352,7 @@ def run_split_video_job(project_id: str):
                 {
                     "start": format_seconds_to_time(start_seconds),
                     "end": format_seconds_to_time(end_seconds),
-                    "name": f"Parte {position:02d}",
+                    "name": segment_name,
                     "batch_id": batch_id,
                     "status": "processed",
                     "output_name": output_name,
@@ -800,7 +1362,7 @@ def run_split_video_job(project_id: str):
 
             save_cuts_registry(project_id, remaining_cuts + generated_cuts)
 
-        metadata["status"] = f"Video Splitter concluído: {total} parte(s) gerada(s)"
+        metadata["status"] = f"Video Splitter concluído: {total} trecho(s) gerado(s)" if mode == "manual_segments" else f"Video Splitter concluído: {total} parte(s) gerada(s)"
         metadata["cuts_defined"] = "yes"
         metadata["duration"] = str(duration)
         save_metadata(project_id, metadata)
@@ -808,7 +1370,7 @@ def run_split_video_job(project_id: str):
         update_job(
             project_id,
             "split_video",
-            build_success_status("split_video", "Divisão concluída", f"{total} parte(s) foram geradas com sucesso."),
+            build_success_status("split_video", "Divisão concluída", f"{total} arquivo(s) foram gerados com sucesso."),
         )
     except Exception as e:
         fail_job(project_id, "split_video", str(e))
@@ -1079,6 +1641,7 @@ def upload_video():
             "status": "Vídeo carregado",
             "task_type": task_type,
             "transcription_generated": "no",
+            "speakers_identified": "no",
             "cuts_defined": "no",
         },
     )
@@ -1106,6 +1669,9 @@ def project_detail(project_id):
     cuts = load_cuts(project_id)
     ai_suggestions = load_ai_suggestions(project_id)
     selected_ai_cuts = load_selected_ai_cuts(project_id)
+    speaker_transcript = load_speaker_transcript(project_id)
+    speaker_settings = load_speaker_settings(project_id)
+    ai_request = load_ai_request(project_id)
     next_cut_number = get_next_cut_number(project_id)
     processed_files = get_processed_files(project_id)
     job_statuses = {job_type: load_job_status(get_project_path(project_id), job_type) for job_type in JOB_TYPES}
@@ -1120,6 +1686,9 @@ def project_detail(project_id):
         processed_files=processed_files,
         ai_suggestions=ai_suggestions,
         selected_ai_cuts=selected_ai_cuts,
+        speaker_transcript=speaker_transcript,
+        speaker_settings=speaker_settings,
+        ai_request=ai_request,
         next_cut_number=next_cut_number,
         job_statuses=job_statuses,
     )
@@ -1132,7 +1701,7 @@ def split_video(project_id):
         metadata = load_metadata(project_id)
         mode = request.form.get("split_mode", "fixed_duration")
 
-        if mode in ("fixed_duration", "social_preset"):
+        if mode == "fixed_duration":
             duration_value = request.form.get("split_duration_seconds", "60")
             if duration_value == "custom":
                 duration_value = request.form.get("custom_duration_seconds", "")
@@ -1143,6 +1712,8 @@ def split_video(project_id):
             metadata["split_mode"] = "fixed_duration"
             metadata["split_duration_seconds"] = str(duration_seconds)
             metadata["split_parts"] = ""
+            metadata["split_social_platform"] = ""
+            metadata["split_social_format"] = ""
 
         elif mode == "by_parts":
             split_parts = int(request.form.get("split_parts", "0"))
@@ -1176,6 +1747,45 @@ def split_video(project_id):
             metadata["split_parts"] = ""
             metadata["split_social_platform"] = platform
             metadata["split_social_format"] = social_format
+
+        elif mode == "manual_segments":
+            starts = request.form.getlist("split_manual_start[]")
+            ends = request.form.getlist("split_manual_end[]")
+            names = request.form.getlist("split_manual_name[]")
+            manual_segments = []
+
+            for index, (start_time, end_time, name) in enumerate(zip(starts, ends, names), start=1):
+                start_time = start_time.strip()
+                end_time = end_time.strip()
+                name = name.strip()
+
+                if not start_time and not end_time and not name:
+                    continue
+                if not start_time or not end_time:
+                    raise ValueError(f"Preencha início e fim do trecho {index}.")
+
+                start_seconds = parse_time_to_seconds(start_time)
+                end_seconds = parse_time_to_seconds(end_time)
+                if end_seconds <= start_seconds:
+                    raise ValueError(f"O fim do trecho {index} precisa ser maior que o início.")
+
+                manual_segments.append(
+                    {
+                        "start": start_time,
+                        "end": end_time,
+                        "name": sanitize_filename(name or f"Trecho {len(manual_segments) + 1:02d}"),
+                    }
+                )
+
+            if not manual_segments:
+                raise ValueError("Adicione pelo menos um trecho manual.")
+
+            save_split_manual_segments(project_id, manual_segments)
+            metadata["split_mode"] = "manual_segments"
+            metadata["split_duration_seconds"] = ""
+            metadata["split_parts"] = ""
+            metadata["split_social_platform"] = ""
+            metadata["split_social_format"] = ""
 
         else:
             raise ValueError("Modo de divisão inválido.")
@@ -1223,14 +1833,22 @@ def reset_project(project_id):
         get_cuts_txt_path(project_id),
         get_cuts_registry_path(project_id),
         get_ai_suggestions_path(project_id),
+        get_ai_request_path(project_id),
         get_selected_ai_cuts_path(project_id),
+        get_speaker_transcript_path(project_id),
+        get_speaker_settings_path(project_id),
         get_project_subdir(project_id, "Audios") / f"{project_id}.wav",
         get_project_subdir(project_id, "Dados de Processamento") / "selected_ai_cut.json",
+        get_split_manual_segments_path(project_id),
     ]
 
     for path in paths:
         if path.exists():
             path.unlink()
+
+    samples_dir = get_speaker_samples_dir(project_id)
+    if samples_dir.exists():
+        shutil.rmtree(samples_dir, ignore_errors=True)
 
     for output_name in get_processed_files(project_id):
         output_path = get_project_subdir(project_id, "Videos Finalizados") / output_name
@@ -1239,6 +1857,7 @@ def reset_project(project_id):
 
     metadata["status"] = "Vídeo carregado"
     metadata["transcription_generated"] = "no"
+    metadata["speakers_identified"] = "no"
     metadata["cuts_defined"] = "no"
     save_metadata(project_id, metadata)
 
@@ -1264,8 +1883,152 @@ def generate_transcription(project_id):
     return redirect(url_for("project_detail", project_id=project_id))
 
 
+@app.route("/speaker_sample/<project_id>/<speaker_id>")
+def speaker_sample(project_id, speaker_id):
+    speaker_transcript = load_speaker_transcript(project_id)
+    segments = [
+        segment
+        for segment in speaker_transcript.get("segments", [])
+        if segment.get("speaker") == speaker_id
+    ]
+
+    if not segments:
+        abort(404)
+
+    wav_path = get_project_subdir(project_id, "Audios") / f"{project_id}.wav"
+    if not wav_path.exists():
+        abort(404)
+
+    sample_path = get_speaker_sample_path(project_id, speaker_id)
+    if not sample_path.exists():
+        def segment_duration(segment):
+            try:
+                return parse_timestamp_to_float_seconds(segment.get("end", "")) - parse_timestamp_to_float_seconds(segment.get("start", ""))
+            except Exception:
+                return 0
+
+        selected = max(segments, key=segment_duration)
+        start_seconds = max(0, parse_timestamp_to_float_seconds(selected.get("start", "")) - 0.2)
+        end_seconds = max(start_seconds + 0.5, parse_timestamp_to_float_seconds(selected.get("end", "")) + 0.2)
+        duration_seconds = min(12.0, max(0.5, end_seconds - start_seconds))
+
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                f"{start_seconds:.3f}",
+                "-i",
+                str(wav_path),
+                "-t",
+                f"{duration_seconds:.3f}",
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-c:a",
+                "pcm_s16le",
+                str(sample_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    return send_file(sample_path, mimetype="audio/wav", conditional=True)
+
+
+@app.route("/identify_speakers/<project_id>", methods=["POST"])
+def identify_speakers(project_id):
+    try:
+        num_speakers = request.form.get("num_speakers", "").strip()
+        min_speakers = request.form.get("min_speakers", "").strip()
+        max_speakers = request.form.get("max_speakers", "").strip()
+
+        # Se o usuário informar número exato, ele prevalece sobre mínimo/máximo.
+        if num_speakers:
+            parse_optional_positive_int(num_speakers)
+            min_speakers = ""
+            max_speakers = ""
+        else:
+            parse_optional_positive_int(min_speakers)
+            parse_optional_positive_int(max_speakers)
+            if min_speakers and max_speakers and int(min_speakers) > int(max_speakers):
+                raise ValueError("O mínimo de speakers não pode ser maior que o máximo.")
+
+        save_speaker_settings_data(
+            project_id,
+            {
+                "num_speakers": num_speakers,
+                "min_speakers": min_speakers,
+                "max_speakers": max_speakers,
+            },
+        )
+    except Exception as e:
+        if is_ajax_request():
+            return jsonify({"ok": False, "message": str(e)}), 400
+        metadata = load_metadata(project_id)
+        metadata["status"] = str(e)
+        save_metadata(project_id, metadata)
+        return redirect(url_for("project_detail", project_id=project_id))
+
+    started = start_background_job(project_id, "identify_speakers", run_identify_speakers_job)
+    if is_ajax_request():
+        if not started:
+            return jsonify({"ok": False, "message": "Já existe uma identificação de speakers em andamento."}), 409
+        return jsonify({"ok": True, "job_type": "identify_speakers"})
+    scroll_y = request.form.get("scroll_y", "")
+    if scroll_y:
+        return redirect(url_for("project_detail", project_id=project_id, scroll_y=scroll_y))
+    return redirect(url_for("project_detail", project_id=project_id))
+
+
+@app.route("/save_speaker_settings/<project_id>", methods=["POST"])
+def save_speaker_settings(project_id):
+    try:
+        speaker_transcript = load_speaker_transcript(project_id)
+        if not speaker_transcript:
+            raise ValueError("nenhuma transcrição com speakers encontrada")
+
+        names_by_id = {}
+        for speaker in speaker_transcript.get("speakers", []):
+            speaker_id = speaker.get("id", "")
+            if speaker_id:
+                names_by_id[speaker_id] = request.form.get(f"speaker_name_{speaker_id}", "").strip()
+
+        speaker_transcript = apply_speaker_names(speaker_transcript, names_by_id)
+        save_speaker_transcript(project_id, speaker_transcript)
+
+        metadata = load_metadata(project_id)
+        metadata["status"] = "Nomes dos speakers atualizados"
+        save_metadata(project_id, metadata)
+
+        if is_ajax_request():
+            return jsonify({"ok": True})
+
+        scroll_y = request.form.get("scroll_y", "")
+        if scroll_y:
+            return redirect(url_for("project_detail", project_id=project_id, scroll_y=scroll_y))
+        return redirect(url_for("project_detail", project_id=project_id))
+    except Exception as e:
+        if is_ajax_request():
+            return jsonify({"ok": False, "message": str(e)}), 400
+        metadata = load_metadata(project_id)
+        metadata["status"] = str(e)
+        save_metadata(project_id, metadata)
+        return redirect(url_for("project_detail", project_id=project_id))
+
+
 @app.route("/suggest_cuts/<project_id>", methods=["POST"])
 def suggest_cuts(project_id):
+    save_ai_request(
+        project_id,
+        {
+            "selected_speakers": request.form.getlist("selected_speakers"),
+            "free_prompt": request.form.get("free_prompt", "").strip(),
+        },
+    )
     started = start_background_job(project_id, "suggest_cuts", run_suggest_cuts_job)
     if is_ajax_request():
         if not started:
