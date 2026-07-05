@@ -1,24 +1,65 @@
-<div class="progress-panel" id="progress-panel" hidden>
+<div class="progress-panel" id="progress-panel" hidden role="dialog" aria-modal="true" aria-labelledby="progress-title" aria-live="polite">
+  <div class="progress-glass-backdrop" aria-hidden="true"></div>
+
   <div class="progress-inner">
-    <div class="progress-header">
-      <div class="progress-title-wrap">
-        <span class="progress-dot" aria-hidden="true"></span>
-        <strong id="progress-title">Processando...</strong>
-      </div>
-      <div class="progress-meta">
-        <span id="progress-elapsed">00:00</span>
+    <div class="progress-visual" aria-hidden="true">
+      <div class="progress-orb">
         <span id="progress-percent">0%</span>
+        <small>concluído</small>
+      </div>
+
+      <div class="progress-magic-stage">
+        <img id="progress-magic-gif" src="" alt="">
+        <div class="progress-magic-badge">
+          <span>A magia está rolando...</span>
+          <strong id="progress-magic-percent">0%</strong>
+        </div>
       </div>
     </div>
 
-    <div class="progress-track" aria-hidden="true">
-      <div class="progress-fill" id="progress-fill"></div>
-    </div>
+    <div class="progress-content">
+      <div class="progress-header">
+        <div class="progress-title-wrap">
+          <span class="progress-dot" aria-hidden="true"></span>
+          <div>
+            <span class="progress-kicker" id="progress-state-label">Processando</span>
+            <strong id="progress-title">Processando...</strong>
+          </div>
+        </div>
+        <span class="progress-mode" id="progress-mode">EVR Deluxe</span>
+      </div>
 
-    <div class="progress-body">
-      <p class="progress-message" id="progress-message">Preparando...</p>
-      <p class="progress-detail" id="progress-detail"></p>
-      <p class="progress-hint" id="progress-hint"></p>
+      <div class="progress-track" aria-hidden="true">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+
+      <div class="progress-body">
+        <p class="progress-message" id="progress-message">Preparando...</p>
+        <p class="progress-detail" id="progress-detail"></p>
+        <p class="progress-hint" id="progress-hint"></p>
+      </div>
+
+      <div class="progress-stats" aria-label="Informações do processamento">
+        <div>
+          <span>Tempo</span>
+          <strong id="progress-elapsed">00:00</strong>
+        </div>
+        <div>
+          <span>Previsão</span>
+          <strong id="progress-estimate">Calculando</strong>
+        </div>
+        <div>
+          <span>Status</span>
+          <strong id="progress-updated">Iniciando</strong>
+        </div>
+      </div>
+
+      <div class="progress-actions">
+        <button type="button" class="progress-cancel-button" id="progress-cancel-button">
+          Parar processamento
+        </button>
+        <span>Interrompe o job atual e libera o EVR Deluxe.</span>
+      </div>
     </div>
   </div>
 </div>

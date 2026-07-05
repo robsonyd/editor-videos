@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Projeto {{ project_id }}</title>
+  <title>{{ metadata.get("project_title") or project_id }} — EVR Deluxe</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/progress.css') }}">
   <style>
     body {
@@ -95,6 +95,296 @@
       height: 1px;
       background: #ececec;
       margin: 20px 0;
+    }
+    .splitter-studio {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin: 18px 0 22px;
+    }
+    .splitter-selection-bar,
+    .splitter-preview-layout {
+      display: grid;
+      gap: 12px;
+    }
+    .splitter-selection-bar {
+      grid-template-columns: auto auto minmax(90px, 120px) 1fr;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 16px;
+      background: rgba(0, 0, 0, 0.18);
+    }
+    .splitter-selection-bar strong {
+      color: rgba(255, 248, 232, 0.72);
+      font-size: 12px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .splitter-lock-options,
+    .splitter-duration-presets {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .splitter-lock-options label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin: 0;
+      padding: 6px 9px;
+      border: 1px solid rgba(255, 246, 215, 0.10);
+      border-radius: 999px;
+      color: rgba(255, 248, 232, 0.68);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .splitter-lock-options input {
+      width: auto;
+      min-height: 0;
+      margin: 0;
+    }
+    .splitter-selection-duration {
+      max-width: 120px;
+      min-height: 34px;
+      padding: 7px 10px;
+      font-size: 13px;
+    }
+    .splitter-duration-presets button {
+      min-height: 32px;
+      margin: 0;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+    }
+    .splitter-preview-layout {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: stretch;
+    }
+    .splitter-side-panel {
+      display: grid;
+      align-content: start;
+      gap: 10px;
+      padding: 16px;
+      min-width: 0;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.035);
+    }
+    .splitter-preview-panel,
+    .splitter-timeline-panel,
+    .splitter-mode-panel {
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 22px;
+      background:
+        radial-gradient(circle at var(--mx, 50%) var(--my, 0%), rgba(88, 222, 214, 0.04), transparent 34%),
+        rgba(255, 255, 255, 0.035);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .splitter-preview-panel,
+    .splitter-timeline-panel {
+      padding: 16px;
+    }
+    .splitter-video {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border-radius: 18px;
+      background: #050606;
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+    }
+    .splitter-video-meta,
+    .splitter-time-strip,
+    .splitter-timeline-labels {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: rgba(255, 248, 232, 0.56);
+      font-size: 13px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .splitter-video-meta {
+      margin-top: 12px;
+    }
+    .splitter-time-strip {
+      margin: 4px 0 6px;
+    }
+    .splitter-current-time {
+      color: #fff8e8;
+      font-size: 20px;
+      font-weight: 800;
+    }
+    .splitter-timeline {
+      position: relative;
+      height: 78px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.025));
+      background-size: 8.333% 100%, auto;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .splitter-timeline-range {
+      position: absolute;
+      top: 15px;
+      bottom: 15px;
+      left: 0;
+      width: 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(88, 222, 214, 0.28), rgba(232, 200, 101, 0.34));
+      box-shadow: 0 0 30px rgba(88, 222, 214, 0.18);
+      cursor: grab;
+      pointer-events: auto;
+      transition: box-shadow 0.16s ease, filter 0.16s ease;
+      z-index: 1;
+    }
+    .splitter-timeline-range:hover {
+      filter: brightness(1.12);
+      box-shadow: 0 0 38px rgba(88, 222, 214, 0.25), 0 0 30px rgba(232, 200, 101, 0.14);
+    }
+    .splitter-timeline.is-dragging .splitter-timeline-range {
+      cursor: grabbing;
+      filter: brightness(1.18);
+    }
+    .splitter-playhead {
+      position: absolute;
+      top: 8px;
+      bottom: 8px;
+      left: 0;
+      width: 2px;
+      border-radius: 999px;
+      background: #fff8e8;
+      box-shadow: 0 0 18px rgba(255, 248, 232, 0.38);
+      transform: translateX(-1px);
+      cursor: ew-resize;
+      pointer-events: auto;
+      z-index: 4;
+    }
+    .splitter-playhead::before {
+      content: "";
+      position: absolute;
+      inset: -8px -10px;
+    }
+    .splitter-handle {
+      position: absolute;
+      top: 50%;
+      width: 11px;
+      height: 52px;
+      border: 1px solid rgba(255, 255, 255, 0.36);
+      border-radius: 999px;
+      background: linear-gradient(180deg, #fff0a8, #d5af46);
+      box-shadow: 0 10px 26px rgba(232, 200, 101, 0.22);
+      transform: translate(-50%, -50%);
+      cursor: ew-resize;
+      z-index: 3;
+    }
+    .splitter-handle::before {
+      content: "";
+      position: absolute;
+      inset: -10px -8px;
+    }
+    .splitter-handle::after {
+      content: "";
+      position: absolute;
+      inset: 14px 4px;
+      border-left: 1px solid rgba(10, 12, 12, 0.38);
+    }
+    .splitter-timeline-labels {
+      margin-top: 9px;
+    }
+    .splitter-selection-grid {
+      display: grid;
+      grid-template-columns: minmax(96px, 0.72fr) minmax(96px, 0.72fr) minmax(130px, 1.56fr);
+      gap: 10px;
+      align-items: end;
+      margin-top: 4px;
+    }
+    .splitter-selection-grid .time-field,
+    .splitter-selection-grid .name-field {
+      min-width: 0;
+    }
+    .splitter-selection-grid .name-field {
+      grid-column: auto;
+    }
+    .splitter-selection-grid input {
+      width: 100%;
+      min-width: 0;
+      min-height: 42px;
+      font-size: 16px;
+    }
+    .splitter-action-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .splitter-action-row .secondary-button,
+    .splitter-action-row button {
+      margin-top: 0;
+    }
+    #splitter-add-selection.is-added {
+      animation: splitterAddedPulse 0.9s ease both;
+    }
+    @keyframes splitterAddedPulse {
+      0% {
+        transform: translateY(0) scale(1);
+        box-shadow: 0 0 0 0 rgba(88, 255, 173, 0);
+      }
+      28% {
+        transform: translateY(-2px) scale(1.025);
+        box-shadow: 0 0 0 5px rgba(88, 255, 173, 0.14), 0 0 34px rgba(88, 255, 173, 0.28);
+      }
+      100% {
+        transform: translateY(0) scale(1);
+        box-shadow: 0 12px 28px rgba(213, 181, 101, 0.14), 0 1px 0 rgba(255, 255, 255, 0.25) inset;
+      }
+    }
+    .splitter-mode-panel {
+      padding: 18px;
+      margin-top: 18px;
+    }
+    .manual-segments-table {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .manual-segments-header,
+    .manual-segment-row {
+      display: grid;
+      grid-template-columns: 130px 130px minmax(220px, 1fr) 44px;
+      gap: 10px;
+      align-items: center;
+    }
+    .manual-segments-header {
+      color: rgba(255, 248, 232, 0.48);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .manual-segment-row {
+      padding: 9px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 16px;
+      background: rgba(0, 0, 0, 0.18);
+    }
+    .manual-segment-row input {
+      min-height: 42px;
+    }
+    .splitter-empty-segments {
+      padding: 18px;
+      border: 1px dashed rgba(255, 255, 255, 0.14);
+      border-radius: 16px;
+      color: rgba(255, 248, 232, 0.5);
+      font-size: 14px;
+      text-align: center;
     }
     .ai-card {
       border: 1px solid #e3e3e3;
@@ -336,40 +626,6 @@
     .magic-button:hover .magic-particle.p7 { --tx: 62px; --ty: 84px; animation-delay: 0.05s; }
     .magic-button:hover .magic-particle.p8 { --tx: -58px; --ty: -94px; animation-delay: 0.16s; }
 
-    .magic-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.25);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 10050;
-      backdrop-filter: blur(2px);
-    }
-    .magic-overlay.is-visible {
-      display: flex;
-    }
-    .magic-overlay-inner {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 18px;
-    }
-    .magic-overlay img {
-      width: 35vw;
-      max-width: 520px;
-      min-width: 260px;
-      height: auto;
-      border-radius: 18px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
-    }
-    .magic-overlay-caption {
-      color: #fff;
-      font-weight: 700;
-      text-shadow: 0 2px 10px rgba(0,0,0,0.4);
-      letter-spacing: 0.3px;
-    }
-
     @keyframes magicGradient {
       0% { background-position: 0% 50%; }
       50% { background-position: 100% 50%; }
@@ -388,7 +644,31 @@
       100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(1.15) rotate(160deg); opacity: 0; }
     }
 
+    @media (max-width: 1280px) {
+      .splitter-selection-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .splitter-selection-grid .name-field {
+        grid-column: 1 / -1;
+      }
+      .splitter-action-row {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+      .splitter-action-row .actions-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
     @media (max-width: 860px) {
+      .splitter-studio { grid-template-columns: 1fr; }
+      .splitter-selection-bar,
+      .splitter-preview-layout {
+        grid-template-columns: 1fr;
+      }
+      .manual-segments-header { display: none; }
+      .manual-segment-row { grid-template-columns: 1fr; }
       .cut-row { grid-template-columns: 1fr; }
       .manual-segment-row { grid-template-columns: 1fr !important; }
       .margin-grid { grid-template-columns: 1fr; }
@@ -396,138 +676,317 @@
       .cut-item-actions { justify-content: flex-start; grid-column: 2; }
       .actions-row { flex-direction: column; align-items: stretch; }
       .actions-row form, .actions-row button { width: 100%; }
-      .magic-overlay img { width: 75vw; }
     }
   </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
-<body>
+<body class="app-shell project-page">
   {% include 'partials/progress_bar.html' %}
 
-  <div class="box">
-    <h1>Projeto {{ project_id }}</h1>
-    <p><strong>Arquivo:</strong> {{ metadata.get("video_name", "") }}</p>
-    <p><strong>Status:</strong> {{ metadata.get("status", "") }}</p>
-    <p><strong>Duração:</strong> {{ metadata.get("duration", "") }} segundos</p>
-    <p><a href="{{ url_for('home') }}">← Voltar para a página inicial</a></p>
-  </div>
+  <header class="app-topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{{ url_for('home') }}">
+        <img class="brand-logo" src="{{ url_for('brand_logo') }}" alt="EVR Deluxe">
+        <span class="brand-mark">
+          <span class="brand-name">EVR Deluxe</span>
+          <span class="brand-kicker">Editor de vídeo local, organizado e inteligente</span>
+        </span>
+      </a>
+
+      <nav class="nav-actions" aria-label="Navegação principal">
+        <span class="nav-context">
+          {% if metadata.get("task_type", "ai_cuts") == "video_splitter" %}
+            Video Splitter
+          {% else %}
+            Cortes inteligentes com I.A
+          {% endif %}
+        </span>
+        <a class="nav-link" href="{{ url_for('home') }}">Home</a>
+        <a class="nav-link is-strong" href="{{ url_for('settings_page') }}">Configurações</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <section class="project-console">
+      <div class="project-console-copy">
+        <div class="project-file-line">
+          <span>Arquivo original:</span>
+          <strong>{{ metadata.get("video_name", "") }}</strong>
+        </div>
+        <h1>{{ metadata.get("project_title") or project_id }}</h1>
+        <div class="project-console-meta">
+          <span>ID do projeto: {{ project_id }}</span>
+          {% if metadata.get("duration") %}
+            <span>Duração do vídeo: {{ metadata.get("duration") }} segundos</span>
+          {% endif %}
+          <span>Tempo de processamento: {{ total_processing_time or "—" }}</span>
+          <span>Status atual: {{ metadata.get("status", "") }}</span>
+        </div>
+        <div class="project-quick-summary" aria-label="Resumo compacto do projeto">
+          <span>{{ project_stage_label }}</span>
+          <span>Transcrição: {% if transcript_text %}sim{% else %}não{% endif %}</span>
+          <span>Participantes: {% if speaker_transcript and speaker_transcript.get("speakers") %}{{ speaker_transcript.get("speakers", [])|length }}{% else %}0{% endif %}</span>
+          <span>Sugestões: {{ ai_suggestions.get("cuts", [])|length if ai_suggestions else 0 }}</span>
+          <span>Cortes: {{ cuts|length }}</span>
+          <span>Arquivos: {{ processed_files|length }}</span>
+        </div>
+        <details class="technical-log-panel">
+          <summary>
+            <span>Ver log técnico</span>
+            <small>{% if technical_log_text %}Atualizado por último nos processamentos deste projeto{% else %}Nenhum evento técnico registrado ainda{% endif %}</small>
+          </summary>
+          <div class="technical-log-body">
+            <pre data-technical-log>{{ technical_log_text or "O log técnico será criado quando uma etapa começar a processar." }}</pre>
+            <button type="button" class="secondary-button" data-copy-technical-log>Copiar log</button>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    {% if show_ai_cuts_onboarding or show_video_splitter_onboarding %}
+      <div class="onboarding-tour"
+           data-onboarding-tour
+           data-tour-scope="{% if metadata.get("task_type", "ai_cuts") == "video_splitter" %}video_splitter{% else %}ai_cuts{% endif %}"
+           data-tour-key="{% if metadata.get("task_type", "ai_cuts") == "video_splitter" %}video_splitter_tour_seen{% else %}ai_cuts_tour_seen{% endif %}"
+           data-dismiss-url="{{ url_for('dismiss_onboarding') }}"
+           hidden
+           aria-hidden="true">
+        <div class="onboarding-tour-scrim" data-tour-dismiss></div>
+        <section class="onboarding-popover" data-tour-card role="dialog" aria-live="polite" aria-label="Dica do projeto">
+          <button type="button" class="onboarding-popover-close" data-tour-dismiss aria-label="Fechar dicas">×</button>
+          <span class="onboarding-popover-kicker" data-tour-kicker>Primeiro uso</span>
+          <h3 data-tour-title></h3>
+          <p data-tour-body></p>
+          <div class="onboarding-popover-actions">
+            <button type="button" class="secondary-button" data-tour-dismiss>Fechar dicas</button>
+            <button type="button" data-tour-next>Próxima</button>
+          </div>
+        </section>
+      </div>
+    {% endif %}
 
 
   {% if metadata.get("task_type", "ai_cuts") == "video_splitter" %}
-    <div class="box">
-      <h2>Video Splitter</h2>
-      <p class="hint">Divida o vídeo em partes automáticas, sem transcrição e sem IA.</p>
+  {% set split_mode = metadata.get("split_mode", "fixed_duration") %}
+  {% set split_duration = metadata.get("split_duration_seconds", "60") %}
+  {% set split_parts = metadata.get("split_parts", "3") %}
+  {% set split_social_platform = metadata.get("split_social_platform", "instagram") %}
+  {% set split_social_format = metadata.get("split_social_format", "reels") %}
+    <div class="workspace-grid splitter-workspace">
+      <aside class="workspace-rail">
+        <span class="section-kicker">Fluxo</span>
+        <h3>Video Splitter</h3>
+        <a href="#splitter-main">Modo de divisão</a>
+        <a href="#splitter-output">Arquivos gerados</a>
+        <p class="hint">Fluxo sem IA, pensado para fatiar vídeos com precisão operacional.</p>
+      </aside>
+
+      <div class="workspace-main">
+    <section class="box" id="splitter-main">
+      <div class="section-header">
+        <div>
+          <span class="section-kicker">Divisão de vídeo</span>
+          <h2>Video Splitter</h2>
+          <p class="hint">Divida o vídeo em partes automáticas, presets sociais ou trechos manuais.</p>
+        </div>
+      </div>
 
       <form action="{{ url_for('split_video', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="split_video" data-project-id="{{ project_id }}" data-keep-scroll="true">
         <input type="hidden" name="scroll_y" value="0">
 
-        <h3>Modo de divisão</h3>
-        <div class="radio-group" style="display:grid; gap:10px; margin: 12px 0 18px;">
-          <label style="display:flex; gap:10px; align-items:flex-start;">
-            <input type="radio" name="split_mode" value="fixed_duration" checked>
-            <span>
-              <strong>Por duração fixa</strong><br>
-              <span class="hint">Ex: gerar partes de 30 segundos, 1 minuto, 3 minutos etc.</span>
-            </span>
-          </label>
-
-          <label style="display:flex; gap:10px; align-items:flex-start;">
-            <input type="radio" name="split_mode" value="by_parts">
-            <span>
-              <strong>Por número de partes</strong><br>
-              <span class="hint">Ex: dividir o vídeo inteiro em 3, 5 ou 10 partes iguais.</span>
-            </span>
-          </label>
-
-          <label style="display:flex; gap:10px; align-items:flex-start;">
-            <input type="radio" name="split_mode" value="social_preset">
-            <span>
-              <strong>Preset por rede social</strong><br>
-              <span class="hint">Escolha Instagram, YouTube, TikTok ou LinkedIn e corte na duração ideal.</span>
-            </span>
-          </label>
-
-          <label style="display:flex; gap:10px; align-items:flex-start;">
-            <input type="radio" name="split_mode" value="manual_segments">
-            <span>
-              <strong>Pinçar trechos manualmente</strong><br>
-              <span class="hint">Defina início e fim de um ou vários trechos específicos.</span>
-            </span>
-          </label>
-        </div>
-
-        <div class="section-divider"></div>
-
-        <div id="fixed-duration-fields">
-          <h3>Duração de cada parte</h3>
-          <select id="split-duration-select" name="split_duration_seconds" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; font-size:14px;">
-            <option value="15">15 segundos</option>
-            <option value="30">30 segundos</option>
-            <option value="60" selected>60 segundos</option>
-            <option value="90">90 segundos</option>
-            <option value="120">2 minutos</option>
-            <option value="180">3 minutos</option>
-            <option value="300">5 minutos</option>
-            <option value="custom">Personalizado</option>
-          </select>
-
-          <div id="custom-duration-field" style="display:none; margin-top:12px;">
-            <label for="custom_duration_seconds"><strong>Duração personalizada em segundos</strong></label>
-            <input type="number" id="custom_duration_seconds" name="custom_duration_seconds" min="1" step="1" placeholder="Ex: 45">
-          </div>
-        </div>
-
-        <div id="parts-fields" style="display:none;">
-          <h3>Número de partes</h3>
-          <input type="number" name="split_parts" min="1" max="10" step="1" value="3">
-          <p class="hint">Limite do MVP: até 10 partes.</p>
-        </div>
-
-        <div id="social-preset-fields" style="display:none;">
-          <h3>Preset por rede social</h3>
-
-          <label for="split-social-platform"><strong>Rede social</strong></label>
-          <select id="split-social-platform" name="split_social_platform" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; font-size:14px;">
-            <option value="instagram">Instagram</option>
-            <option value="youtube">YouTube</option>
-            <option value="tiktok">TikTok</option>
-            <option value="linkedin">LinkedIn</option>
-          </select>
-
-          <label for="split-social-format" style="margin-top:12px;"><strong>Formato</strong></label>
-          <select id="split-social-format" name="split_social_format" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; font-size:14px;"></select>
-
-          <label for="split-social-duration" style="margin-top:12px;"><strong>Duração de cada parte</strong></label>
-          <select id="split-social-duration" name="split_social_duration_seconds" style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid #ccc; box-sizing:border-box; font-size:14px;"></select>
-
-          <p class="hint">O splitter vai gerar partes sequenciais com a duração escolhida para esse formato.</p>
-        </div>
-
-        <div id="manual-segments-fields" style="display:none;">
-          <h3>Pinçar trechos manualmente</h3>
-          <p class="hint">Adicione quantos trechos quiser. O nome é opcional.</p>
-
-          <div id="manual-segments-list">
-            <div class="manual-segment-row" style="display:grid; grid-template-columns: 160px 160px 1fr auto; gap:16px; margin-bottom:16px; align-items:end;">
-              <div class="time-field">
-                <label>Início</label>
-                <input type="time" step="1" name="split_manual_start[]">
-                <small>Formato: hh:mm:ss</small>
-              </div>
-              <div class="time-field">
-                <label>Fim</label>
-                <input type="time" step="1" name="split_manual_end[]">
-                <small>Formato: hh:mm:ss</small>
-              </div>
-              <div class="name-field">
-                <label>Nome do corte</label>
-                <input type="text" name="split_manual_name[]" placeholder="Ex: Trecho principal">
-                <small>Opcional</small>
-              </div>
-              <button type="button" data-remove-manual-segment="true" class="delete-button" title="Remover">🗑️</button>
+        <div class="splitter-studio">
+          <div class="splitter-selection-bar" aria-label="Duração da seleção visual" data-tour-target="splitter-duration">
+            <strong>Duração do trecho</strong>
+            <div class="splitter-lock-options">
+              <label><input type="radio" name="splitter_selection_duration_mode" value="free" data-selection-duration-mode checked> Livre</label>
+              <label><input type="radio" name="splitter_selection_duration_mode" value="fixed" data-selection-duration-mode> Fixa</label>
+            </div>
+            <input class="splitter-selection-duration" type="number" id="splitter-selection-duration" min="1" step="1" value="30" aria-label="Duração fixa em segundos">
+            <div class="splitter-duration-presets">
+              <button type="button" class="secondary-button" data-selection-preset="15">15s</button>
+              <button type="button" class="secondary-button" data-selection-preset="30">30s</button>
+              <button type="button" class="secondary-button" data-selection-preset="60">60s</button>
+              <button type="button" class="secondary-button" data-selection-preset="90">90s</button>
+              <button type="button" class="secondary-button" data-selection-preset="180">3min</button>
             </div>
           </div>
 
-          <button type="button" id="add-manual-segment-button" class="secondary-button">Adicionar outro trecho</button>
+          <div class="splitter-preview-layout" data-tour-target="splitter-visual">
+            <div class="splitter-preview-panel">
+              <video id="splitter-video" class="splitter-video" controls preload="metadata" src="{{ url_for('project_video', project_id=project_id) }}">
+                Seu navegador não conseguiu carregar o preview do vídeo.
+              </video>
+              <div class="splitter-video-meta">
+                <span>{{ metadata.get("video_name", "Vídeo bruto") }}</span>
+                <span id="splitter-duration-label">{% if metadata.get("duration") %}{{ metadata.get("duration")|float|round|int }}s{% else %}--:--{% endif %}</span>
+              </div>
+            </div>
+
+            <div class="splitter-side-panel">
+              <span class="section-kicker">Seleção visual</span>
+              <h3>Pinçar trecho</h3>
+              <div class="splitter-time-strip">
+                <span>Agora</span>
+                <strong class="splitter-current-time" id="splitter-current-time">00:00:00</strong>
+              </div>
+
+              <div class="splitter-selection-grid">
+                <div class="time-field">
+                  <label for="splitter-selection-start">Início</label>
+                  <input type="text" id="splitter-selection-start" value="00:00:00" inputmode="numeric">
+                </div>
+                <div class="time-field">
+                  <label for="splitter-selection-end">Fim</label>
+                  <input type="text" id="splitter-selection-end" value="00:00:00" inputmode="numeric">
+                </div>
+                <div class="name-field">
+                  <label for="splitter-selection-name">Nome do trecho</label>
+                  <input type="text" id="splitter-selection-name" placeholder="Ex: Trecho 01">
+                </div>
+              </div>
+
+              <div class="splitter-action-row">
+                <div class="actions-row">
+                  <button type="button" class="secondary-button" id="splitter-mark-start">Marcar início</button>
+                  <button type="button" class="secondary-button" id="splitter-mark-end">Marcar fim</button>
+                </div>
+                <div class="actions-row">
+                  <button type="button" class="secondary-button" id="splitter-preview-selection">Reproduzir trecho</button>
+                  <button type="button" id="splitter-add-selection">Adicionar trecho</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="splitter-timeline-panel">
+            <div class="splitter-time-strip">
+              <span>Linha do tempo</span>
+              <span>arraste as pinças ou a faixa selecionada</span>
+            </div>
+
+            <div class="splitter-timeline" id="splitter-timeline" role="slider" aria-label="Linha do tempo do vídeo">
+              <div class="splitter-timeline-range" id="splitter-timeline-range"></div>
+              <span class="splitter-playhead" id="splitter-playhead"></span>
+              <span class="splitter-handle" id="splitter-start-handle" data-handle="start" title="Início"></span>
+              <span class="splitter-handle" id="splitter-end-handle" data-handle="end" title="Fim"></span>
+            </div>
+            <div class="splitter-timeline-labels">
+              <span>00:00:00</span>
+              <span id="splitter-total-time">00:00:00</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="splitter-mode-panel" data-tour-target="splitter-mode">
+          <h3>Modo de divisão</h3>
+          <div class="radio-group">
+            <label class="radio-card mode-card">
+              <input type="radio" name="split_mode" value="fixed_duration" {% if split_mode == "fixed_duration" %}checked{% endif %}>
+              <span>
+                <strong>Por duração fixa</strong><br>
+                <span class="hint">Ex: gerar partes de 30 segundos, 1 minuto, 3 minutos etc.</span>
+              </span>
+            </label>
+
+            <label class="radio-card mode-card">
+              <input type="radio" name="split_mode" value="by_parts" {% if split_mode == "by_parts" %}checked{% endif %}>
+              <span>
+                <strong>Por número de partes</strong><br>
+                <span class="hint">Ex: dividir o vídeo inteiro em 3, 5 ou 10 partes iguais.</span>
+              </span>
+            </label>
+
+            <label class="radio-card mode-card">
+              <input type="radio" name="split_mode" value="social_preset" {% if split_mode == "social_preset" %}checked{% endif %}>
+              <span>
+                <strong>Preset por rede social</strong><br>
+                <span class="hint">Escolha Instagram, YouTube, TikTok ou LinkedIn e corte na duração ideal.</span>
+              </span>
+            </label>
+
+            <label class="radio-card mode-card">
+              <input type="radio" name="split_mode" value="manual_segments" {% if split_mode == "manual_segments" %}checked{% endif %}>
+              <span>
+                <strong>Pinçar trechos manualmente</strong><br>
+                <span class="hint">Use o preview e adicione trechos à fila manual.</span>
+              </span>
+            </label>
+          </div>
+
+          <div class="section-divider"></div>
+
+          <div id="fixed-duration-fields">
+            <h3>Duração de cada parte</h3>
+            <select id="split-duration-select" name="split_duration_seconds">
+              <option value="15" {% if split_duration == "15" %}selected{% endif %}>15 segundos</option>
+              <option value="30" {% if split_duration == "30" %}selected{% endif %}>30 segundos</option>
+              <option value="60" {% if split_duration == "60" or not split_duration %}selected{% endif %}>60 segundos</option>
+              <option value="90" {% if split_duration == "90" %}selected{% endif %}>90 segundos</option>
+              <option value="120" {% if split_duration == "120" %}selected{% endif %}>2 minutos</option>
+              <option value="180" {% if split_duration == "180" %}selected{% endif %}>3 minutos</option>
+              <option value="300" {% if split_duration == "300" %}selected{% endif %}>5 minutos</option>
+              <option value="custom" {% if split_duration and split_duration not in ["15", "30", "60", "90", "120", "180", "300"] %}selected{% endif %}>Personalizado</option>
+            </select>
+
+            <div id="custom-duration-field" style="display:none; margin-top:12px;">
+              <label for="custom_duration_seconds"><strong>Duração personalizada em segundos</strong></label>
+              <input type="number" id="custom_duration_seconds" name="custom_duration_seconds" min="1" step="1" value="{% if split_duration and split_duration not in ["15", "30", "60", "90", "120", "180", "300"] %}{{ split_duration }}{% endif %}" placeholder="Ex: 45">
+            </div>
+          </div>
+
+          <div id="parts-fields" style="display:none;">
+            <h3>Número de partes</h3>
+            <input type="number" name="split_parts" min="1" max="10" step="1" value="{{ split_parts or 3 }}">
+            <p class="hint">Limite do MVP: até 10 partes.</p>
+          </div>
+
+          <div id="social-preset-fields" style="display:none;">
+            <h3>Preset por rede social</h3>
+
+            <label for="split-social-platform"><strong>Rede social</strong></label>
+            <select id="split-social-platform" name="split_social_platform">
+              <option value="instagram" {% if split_social_platform == "instagram" %}selected{% endif %}>Instagram</option>
+              <option value="youtube" {% if split_social_platform == "youtube" %}selected{% endif %}>YouTube</option>
+              <option value="tiktok" {% if split_social_platform == "tiktok" %}selected{% endif %}>TikTok</option>
+              <option value="linkedin" {% if split_social_platform == "linkedin" %}selected{% endif %}>LinkedIn</option>
+            </select>
+
+            <label for="split-social-format" style="margin-top:12px;"><strong>Formato</strong></label>
+            <select id="split-social-format" name="split_social_format" data-current-format="{{ split_social_format }}"></select>
+
+            <label for="split-social-duration" style="margin-top:12px;"><strong>Duração de cada parte</strong></label>
+            <select id="split-social-duration" name="split_social_duration_seconds" data-current-duration="{{ split_duration }}"></select>
+
+            <p class="hint">O splitter vai gerar partes sequenciais com a duração escolhida para esse formato.</p>
+          </div>
+
+          <div id="manual-segments-fields" style="display:none;">
+            <h3>Trechos manuais</h3>
+            <div class="manual-segments-table">
+              <div class="manual-segments-header">
+                <span>Início</span>
+                <span>Fim</span>
+                <span>Nome do trecho</span>
+                <span></span>
+              </div>
+              <div id="manual-segments-list">
+                {% for segment in split_manual_segments %}
+                  <div class="manual-segment-row">
+                    <input type="text" name="split_manual_start[]" value="{{ segment.start }}" inputmode="numeric">
+                    <input type="text" name="split_manual_end[]" value="{{ segment.end }}" inputmode="numeric">
+                    <input type="text" name="split_manual_name[]" value="{{ segment.name }}" placeholder="Ex: Trecho principal">
+                    <button type="button" data-remove-manual-segment="true" class="delete-button" title="Remover">×</button>
+                  </div>
+                {% endfor %}
+              </div>
+              <div class="splitter-empty-segments" id="splitter-empty-segments" {% if split_manual_segments %}hidden{% endif %}>
+                Nenhum trecho manual adicionado.
+              </div>
+            </div>
+
+            <button type="button" id="add-manual-segment-button" class="secondary-button">Adicionar linha manual</button>
+          </div>
         </div>
 
         <button type="submit">Processar divisão</button>
@@ -537,15 +996,30 @@
         <input type="hidden" name="scroll_y" value="0">
         <button type="submit" class="secondary-button">Limpar arquivos gerados</button>
       </form>
-    </div>
+    </section>
 
-    <div class="box">
-      <h2>Arquivos gerados</h2>
+    <section class="box" id="splitter-output">
+      <div class="section-header">
+        <div>
+          <span class="section-kicker">Saída</span>
+          <h2>Arquivos gerados</h2>
+        </div>
+      </div>
 
       {% if processed_files %}
-        <ul>
+        <ul class="file-list">
           {% for file in processed_files %}
-            <li>{{ file }}</li>
+            <li class="file-card">
+              <span class="file-name">{{ file }}</span>
+              <div class="file-actions">
+                <form action="{{ url_for('open_processed_file', project_id=project_id, filename=file) }}" method="POST">
+                  <button type="submit" class="secondary-button">Reproduzir</button>
+                </form>
+                <form action="{{ url_for('delete_processed_file', project_id=project_id, filename=file) }}" method="POST" onsubmit="return confirm('Excluir este arquivo gerado?');">
+                  <button type="submit" class="delete-button" title="Excluir">×</button>
+                </form>
+              </div>
+            </li>
           {% endfor %}
         </ul>
 
@@ -555,24 +1029,57 @@
           <button type="submit">Abrir pasta do projeto</button>
         </form>
       {% else %}
-        <p>Nenhum arquivo gerado ainda.</p>
+        <div class="empty-state">
+          <strong>Nenhum arquivo gerado ainda.</strong>
+          <span>Escolha um modo de divisão e processe o vídeo.</span>
+        </div>
       {% endif %}
+    </section>
+      </div>
     </div>
 
     <script>
       (function () {
+        const splitterForm = document.querySelector('form[action*="/split_video/"]');
+        const video = document.getElementById('splitter-video');
+        const timeline = document.getElementById('splitter-timeline');
+        const range = document.getElementById('splitter-timeline-range');
+        const playhead = document.getElementById('splitter-playhead');
+        const startHandle = document.getElementById('splitter-start-handle');
+        const endHandle = document.getElementById('splitter-end-handle');
+        const currentTimeLabel = document.getElementById('splitter-current-time');
+        const totalTimeLabel = document.getElementById('splitter-total-time');
+        const durationBadge = document.getElementById('splitter-duration-label');
+        const selectionStartInput = document.getElementById('splitter-selection-start');
+        const selectionEndInput = document.getElementById('splitter-selection-end');
+        const selectionNameInput = document.getElementById('splitter-selection-name');
+        const selectionDurationModeInputs = document.querySelectorAll('[data-selection-duration-mode]');
+        const selectionDurationInput = document.getElementById('splitter-selection-duration');
+        const selectionPresetButtons = document.querySelectorAll('[data-selection-preset]');
+        const markStartButton = document.getElementById('splitter-mark-start');
+        const markEndButton = document.getElementById('splitter-mark-end');
+        const previewSelectionButton = document.getElementById('splitter-preview-selection');
+        const addSelectionButton = document.getElementById('splitter-add-selection');
         const modeInputs = document.querySelectorAll('input[name="split_mode"]');
         const fixedFields = document.getElementById('fixed-duration-fields');
         const partsFields = document.getElementById('parts-fields');
         const durationSelect = document.getElementById('split-duration-select');
         const customField = document.getElementById('custom-duration-field');
+        const customDurationInput = document.getElementById('custom_duration_seconds');
         const socialFields = document.getElementById('social-preset-fields');
         const manualFields = document.getElementById('manual-segments-fields');
         const manualList = document.getElementById('manual-segments-list');
+        const emptySegments = document.getElementById('splitter-empty-segments');
         const addManualSegmentButton = document.getElementById('add-manual-segment-button');
         const socialPlatform = document.getElementById('split-social-platform');
         const socialFormat = document.getElementById('split-social-format');
         const socialDuration = document.getElementById('split-social-duration');
+        let videoDuration = Number({{ metadata.get("duration") or 0 }}) || 0;
+        let selectionStart = 0;
+        let selectionEnd = 0;
+        let draggingHandle = null;
+        let dragSelectionOffset = 0;
+        let isPreviewingSelection = false;
 
         const socialPresets = {
           instagram: {
@@ -602,18 +1109,263 @@
           }
         };
 
-        function durationLabel(seconds) {
+        function clamp(value, min, max) {
+          return Math.min(max, Math.max(min, value));
+        }
+
+        function formatTime(seconds) {
+          const totalSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+          const hours = Math.floor(totalSeconds / 3600);
+          const minutes = Math.floor((totalSeconds % 3600) / 60);
+          const secs = totalSeconds % 60;
+          return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function parseTimeValue(value) {
+          const parts = String(value || '').trim().split(':').map(part => Number(part));
+          if (parts.some(part => Number.isNaN(part))) return 0;
+          if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2];
+          if (parts.length === 2) return (parts[0] * 60) + parts[1];
+          if (parts.length === 1) return parts[0] || 0;
+          return 0;
+        }
+
+        function escapeAttr(value) {
+          return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        }
+
+        function formatDurationOption(seconds) {
           if (seconds < 60) return `${seconds} segundos`;
           if (seconds === 60) return '60 segundos';
           if (seconds % 60 === 0) return `${seconds / 60} minutos`;
           return `${seconds} segundos`;
         }
 
+        function getSelectionGap() {
+          if (!videoDuration) return 0;
+          return Math.min(1, Math.max(0, videoDuration));
+        }
+
+        function getSelectedMode() {
+          const selected = document.querySelector('input[name="split_mode"]:checked');
+          return selected ? selected.value : 'fixed_duration';
+        }
+
+        function getSelectionDurationMode() {
+          const selected = document.querySelector('[data-selection-duration-mode]:checked');
+          return selected ? selected.value : 'free';
+        }
+
+        function setSelectionDurationMode(mode) {
+          const input = document.querySelector(`[data-selection-duration-mode][value="${mode}"]`);
+          if (input) input.checked = true;
+        }
+
+        function getLockedSelectionDuration() {
+          if (!videoDuration) return 0;
+          if (getSelectionDurationMode() !== 'fixed') return 0;
+
+          const duration = Number(selectionDurationInput ? selectionDurationInput.value : 0) || 0;
+          if (!duration) return 0;
+          return clamp(duration, getSelectionGap(), videoDuration);
+        }
+
+        function setFixedSelectionDuration(seconds) {
+          if (selectionDurationInput) selectionDurationInput.value = String(Math.max(1, Math.round(Number(seconds) || 1)));
+          setSelectionDurationMode('fixed');
+          syncSelectionWithActiveMode('start');
+        }
+
+        function seekPreview(seconds) {
+          if (!video || !videoDuration) return;
+          video.currentTime = clamp(seconds, 0, videoDuration);
+        }
+
+        function setSelection(start, end, syncInputs = true, options = {}) {
+          const gap = getSelectionGap();
+          const lockedDuration = options.ignoreLock ? 0 : getLockedSelectionDuration();
+
+          if (lockedDuration) {
+            const duration = clamp(lockedDuration, gap, videoDuration || lockedDuration);
+            if (options.anchor === 'end') {
+              selectionEnd = clamp(Number(end) || duration, duration, videoDuration || duration);
+              selectionStart = Math.max(0, selectionEnd - duration);
+            } else {
+              selectionStart = clamp(Number(start) || 0, 0, Math.max(0, (videoDuration || duration) - duration));
+              selectionEnd = selectionStart + duration;
+            }
+          } else {
+            selectionStart = clamp(Number(start) || 0, 0, Math.max(0, videoDuration - gap));
+            selectionEnd = clamp(Number(end) || 0, selectionStart + gap, videoDuration || selectionStart + gap);
+          }
+
+          if (syncInputs) {
+            if (selectionStartInput) selectionStartInput.value = formatTime(selectionStart);
+            if (selectionEndInput) selectionEndInput.value = formatTime(selectionEnd);
+          }
+          updateTimeline();
+
+          if (options.seek === 'start') seekPreview(selectionStart);
+          if (options.seek === 'end') seekPreview(selectionEnd);
+        }
+
+        function updateTimeline() {
+          const duration = videoDuration || 1;
+          const startPercent = (selectionStart / duration) * 100;
+          const endPercent = (selectionEnd / duration) * 100;
+          const current = video ? video.currentTime || 0 : 0;
+          const currentPercent = (current / duration) * 100;
+
+          if (range) {
+            range.style.left = `${startPercent}%`;
+            range.style.width = `${Math.max(0, endPercent - startPercent)}%`;
+          }
+          if (startHandle) startHandle.style.left = `${startPercent}%`;
+          if (endHandle) endHandle.style.left = `${endPercent}%`;
+          if (playhead) playhead.style.left = `${clamp(currentPercent, 0, 100)}%`;
+          if (currentTimeLabel) currentTimeLabel.textContent = formatTime(current);
+          if (totalTimeLabel) totalTimeLabel.textContent = formatTime(videoDuration);
+          if (durationBadge) durationBadge.textContent = formatTime(videoDuration);
+          if (timeline) timeline.classList.toggle('is-locked', Boolean(getLockedSelectionDuration()));
+        }
+
+        function secondsFromTimelineEvent(event) {
+          if (!timeline || !videoDuration) return 0;
+          const rect = timeline.getBoundingClientRect();
+          const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+          return ratio * videoDuration;
+        }
+
+        function syncSelectionWithActiveMode(anchor = 'start') {
+          const lockedDuration = getLockedSelectionDuration();
+          if (!lockedDuration) {
+            updateTimeline();
+            return;
+          }
+
+          if (anchor === 'end') {
+            setSelection(selectionEnd - lockedDuration, selectionEnd, true, { anchor: 'end' });
+          } else {
+            setSelection(selectionStart, selectionStart + lockedDuration, true, { anchor: 'start' });
+          }
+        }
+
+        function moveSelectionRange(seconds) {
+          const currentDuration = Math.max(getSelectionGap(), selectionEnd - selectionStart);
+          const nextStart = clamp(seconds - dragSelectionOffset, 0, Math.max(0, videoDuration - currentDuration));
+          setSelection(nextStart, nextStart + currentDuration, true, { ignoreLock: true, seek: 'start' });
+        }
+
+        function moveTimelineDrag(event) {
+          if (!draggingHandle) return;
+          const seconds = secondsFromTimelineEvent(event);
+
+          if (draggingHandle === 'range') {
+            moveSelectionRange(seconds);
+          } else if (draggingHandle === 'start') {
+            setSelection(seconds, selectionEnd, true, { anchor: 'start', seek: 'start' });
+          } else if (draggingHandle === 'end') {
+            setSelection(selectionStart, seconds, true, { anchor: 'end', seek: 'end' });
+          } else if (draggingHandle === 'playhead') {
+            seekPreview(seconds);
+            updateTimeline();
+          }
+        }
+
+        function endTimelineDrag() {
+          draggingHandle = null;
+          if (timeline) timeline.classList.remove('is-dragging');
+        }
+
+        function setMode(mode) {
+          const input = document.querySelector(`input[name="split_mode"][value="${mode}"]`);
+          if (!input) return;
+          input.checked = true;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        function refreshEmptySegments() {
+          if (!manualList || !emptySegments) return;
+          emptySegments.hidden = Boolean(manualList.querySelector('.manual-segment-row'));
+        }
+
+        function nextManualSegmentName() {
+          const count = manualList ? manualList.querySelectorAll('.manual-segment-row').length + 1 : 1;
+          return `Trecho ${String(count).padStart(2, '0')}`;
+        }
+
+        function addManualSegmentRow(segment = {}) {
+          if (!manualList) return null;
+          const row = document.createElement('div');
+          row.className = 'manual-segment-row';
+          row.innerHTML = `
+            <input type="text" name="split_manual_start[]" value="${escapeAttr(segment.start)}" inputmode="numeric" placeholder="00:00:00">
+            <input type="text" name="split_manual_end[]" value="${escapeAttr(segment.end)}" inputmode="numeric" placeholder="00:00:00">
+            <input type="text" name="split_manual_name[]" value="${escapeAttr(segment.name)}" placeholder="Ex: Trecho principal">
+            <button type="button" data-remove-manual-segment="true" class="delete-button" title="Remover">×</button>
+          `;
+          manualList.appendChild(row);
+          refreshEmptySegments();
+          return row;
+        }
+
+        function addSelectionToManualList() {
+          if (selectionEnd <= selectionStart) {
+            alert('Defina um fim maior que o início.');
+            return;
+          }
+
+          const name = selectionNameInput && selectionNameInput.value.trim() ? selectionNameInput.value.trim() : nextManualSegmentName();
+          addManualSegmentRow({
+            start: formatTime(selectionStart),
+            end: formatTime(selectionEnd),
+            name
+          });
+          setMode('manual_segments');
+          if (selectionNameInput) selectionNameInput.value = '';
+          if (addSelectionButton) {
+            const originalText = addSelectionButton.dataset.defaultText || addSelectionButton.textContent;
+            addSelectionButton.dataset.defaultText = originalText;
+            addSelectionButton.textContent = 'Trecho adicionado ✓';
+            addSelectionButton.classList.remove('is-added');
+            void addSelectionButton.offsetWidth;
+            addSelectionButton.classList.add('is-added');
+            window.clearTimeout(addSelectionButton._evrAddedTimer);
+            addSelectionButton._evrAddedTimer = window.setTimeout(() => {
+              addSelectionButton.textContent = originalText;
+              addSelectionButton.classList.remove('is-added');
+            }, 1400);
+          }
+        }
+
+        function markStartFromVideo() {
+          const current = video ? video.currentTime || 0 : 0;
+          const nextEnd = current >= selectionEnd ? Math.min(videoDuration, current + 60) : selectionEnd;
+          setSelection(current, nextEnd, true, { anchor: 'start', seek: 'start' });
+        }
+
+        function markEndFromVideo() {
+          const current = video ? video.currentTime || 0 : 0;
+          const nextStart = current <= selectionStart ? Math.max(0, current - 60) : selectionStart;
+          setSelection(nextStart, current, true, { anchor: 'end', seek: 'end' });
+        }
+
+        function previewSelection() {
+          if (!video || selectionEnd <= selectionStart) return;
+          isPreviewingSelection = true;
+          video.currentTime = selectionStart;
+          video.play().catch(() => {});
+        }
+
         function refreshSocialFormats() {
           if (!socialPlatform || !socialFormat) return;
 
           const platform = socialPlatform.value;
-          const currentFormat = socialFormat.value;
+          const currentFormat = socialFormat.value || socialFormat.dataset.currentFormat || '';
           const formats = socialPresets[platform].formats;
 
           socialFormat.innerHTML = '';
@@ -628,6 +1380,7 @@
           if (formats[currentFormat]) {
             socialFormat.value = currentFormat;
           }
+          socialFormat.dataset.currentFormat = socialFormat.value;
 
           refreshSocialDurations();
         }
@@ -638,63 +1391,43 @@
           const platform = socialPlatform.value;
           const format = socialFormat.value;
           const durations = socialPresets[platform].formats[format].durations;
+          const currentDuration = socialDuration.value || socialDuration.dataset.currentDuration || '';
 
           socialDuration.innerHTML = '';
 
           durations.forEach((seconds) => {
             const option = document.createElement('option');
             option.value = String(seconds);
-            option.textContent = durationLabel(seconds);
+            option.textContent = formatDurationOption(seconds);
             socialDuration.appendChild(option);
           });
+          if (currentDuration && durations.includes(Number(currentDuration))) {
+            socialDuration.value = currentDuration;
+          }
+          socialDuration.dataset.currentDuration = socialDuration.value;
+          syncSelectionWithActiveMode('start');
         }
 
         function refreshMode() {
-          const selected = document.querySelector('input[name="split_mode"]:checked');
-          const mode = selected ? selected.value : 'fixed_duration';
+          const mode = getSelectedMode();
           if (fixedFields) fixedFields.style.display = mode === 'fixed_duration' ? 'block' : 'none';
           if (partsFields) partsFields.style.display = mode === 'by_parts' ? 'block' : 'none';
           if (socialFields) socialFields.style.display = mode === 'social_preset' ? 'block' : 'none';
           if (manualFields) manualFields.style.display = mode === 'manual_segments' ? 'block' : 'none';
+          syncSelectionWithActiveMode('start');
         }
 
         function refreshCustomDuration() {
           if (!durationSelect || !customField) return;
           customField.style.display = durationSelect.value === 'custom' ? 'block' : 'none';
-        }
-
-        function addManualSegmentRow() {
-          if (!manualList) return;
-          const row = document.createElement('div');
-          row.className = 'manual-segment-row';
-          row.style.cssText = 'display:grid; grid-template-columns: 160px 160px 1fr auto; gap:16px; margin-bottom:16px; align-items:end;';
-          row.innerHTML = `
-            <div class="time-field">
-              <label>Início</label>
-              <input type="time" step="1" name="split_manual_start[]">
-              <small>Formato: hh:mm:ss</small>
-            </div>
-            <div class="time-field">
-              <label>Fim</label>
-              <input type="time" step="1" name="split_manual_end[]">
-              <small>Formato: hh:mm:ss</small>
-            </div>
-            <div class="name-field">
-              <label>Nome do corte</label>
-              <input type="text" name="split_manual_name[]" placeholder="Ex: Trecho principal">
-              <small>Opcional</small>
-            </div>
-            <button type="button" data-remove-manual-segment="true" class="delete-button" title="Remover">🗑️</button>
-          `;
-          manualList.appendChild(row);
-        }
-
-        function clearManualSegmentRow(row) {
-          row.querySelectorAll('input').forEach(input => input.value = '');
+          syncSelectionWithActiveMode('start');
         }
 
         if (addManualSegmentButton) {
-          addManualSegmentButton.addEventListener('click', addManualSegmentRow);
+          addManualSegmentButton.addEventListener('click', () => {
+            addManualSegmentRow();
+            setMode('manual_segments');
+          });
         }
 
         if (manualList) {
@@ -702,71 +1435,384 @@
             const button = event.target.closest('[data-remove-manual-segment="true"]');
             if (!button) return;
             const row = button.closest('.manual-segment-row');
-            const rows = manualList.querySelectorAll('.manual-segment-row');
-            if (rows.length <= 1) {
-              clearManualSegmentRow(row);
-              return;
-            }
-            row.remove();
+            if (row) row.remove();
+            refreshEmptySegments();
           });
+        }
+
+        if (video) {
+          video.addEventListener('loadedmetadata', () => {
+            videoDuration = Number(video.duration || videoDuration || 0);
+            const lockedDuration = getLockedSelectionDuration();
+            setSelection(0, lockedDuration || Math.min(60, videoDuration || 60), true, { anchor: 'start' });
+          });
+          video.addEventListener('timeupdate', () => {
+            if (isPreviewingSelection && video.currentTime >= selectionEnd) {
+              video.pause();
+              isPreviewingSelection = false;
+            }
+            updateTimeline();
+          });
+          video.addEventListener('pause', () => {
+            isPreviewingSelection = false;
+          });
+        }
+
+        if (timeline) {
+          timeline.addEventListener('click', (event) => {
+            if (event.target.closest('.splitter-handle') || event.target.closest('.splitter-playhead') || event.target.closest('.splitter-timeline-range')) return;
+            const seconds = secondsFromTimelineEvent(event);
+            if (getLockedSelectionDuration()) {
+              setSelection(seconds, seconds + getLockedSelectionDuration(), true, { anchor: 'start', seek: 'start' });
+            } else {
+              seekPreview(seconds);
+            }
+            updateTimeline();
+          });
+        }
+
+        [startHandle, endHandle].forEach((handle) => {
+          if (!handle) return;
+          handle.addEventListener('pointerdown', (event) => {
+            draggingHandle = handle.dataset.handle;
+            handle.setPointerCapture(event.pointerId);
+            if (timeline) timeline.classList.add('is-dragging');
+            event.preventDefault();
+          });
+          handle.addEventListener('pointermove', moveTimelineDrag);
+          handle.addEventListener('pointerup', endTimelineDrag);
+          handle.addEventListener('pointercancel', endTimelineDrag);
+        });
+
+        if (playhead) {
+          playhead.addEventListener('pointerdown', (event) => {
+            draggingHandle = 'playhead';
+            playhead.setPointerCapture(event.pointerId);
+            if (timeline) timeline.classList.add('is-dragging');
+            event.preventDefault();
+          });
+          playhead.addEventListener('pointermove', moveTimelineDrag);
+          playhead.addEventListener('pointerup', endTimelineDrag);
+          playhead.addEventListener('pointercancel', endTimelineDrag);
+        }
+
+        if (range) {
+          range.addEventListener('pointerdown', (event) => {
+            draggingHandle = 'range';
+            dragSelectionOffset = secondsFromTimelineEvent(event) - selectionStart;
+            range.setPointerCapture(event.pointerId);
+            if (timeline) timeline.classList.add('is-dragging');
+            event.preventDefault();
+          });
+          range.addEventListener('pointermove', moveTimelineDrag);
+          range.addEventListener('pointerup', endTimelineDrag);
+          range.addEventListener('pointercancel', endTimelineDrag);
+        }
+
+        if (selectionStartInput) {
+          selectionStartInput.addEventListener('change', () => setSelection(parseTimeValue(selectionStartInput.value), selectionEnd, true, { anchor: 'start', seek: 'start' }));
+        }
+        if (selectionEndInput) {
+          selectionEndInput.addEventListener('change', () => setSelection(selectionStart, parseTimeValue(selectionEndInput.value), true, { anchor: 'end', seek: 'end' }));
+        }
+        if (markStartButton) markStartButton.addEventListener('click', markStartFromVideo);
+        if (markEndButton) markEndButton.addEventListener('click', markEndFromVideo);
+        if (previewSelectionButton) previewSelectionButton.addEventListener('click', previewSelection);
+        if (addSelectionButton) addSelectionButton.addEventListener('click', addSelectionToManualList);
+
+        if (splitterForm) {
+          splitterForm.addEventListener('submit', (event) => {
+            const selected = document.querySelector('input[name="split_mode"]:checked');
+            if (!selected || selected.value !== 'manual_segments') return;
+            if (manualList && manualList.querySelector('.manual-segment-row')) return;
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            alert('Adicione pelo menos um trecho manual antes de processar.');
+          }, true);
         }
 
         modeInputs.forEach(input => input.addEventListener('change', refreshMode));
         if (durationSelect) durationSelect.addEventListener('change', refreshCustomDuration);
+        if (customDurationInput) customDurationInput.addEventListener('input', () => syncSelectionWithActiveMode('start'));
+        selectionDurationModeInputs.forEach(input => input.addEventListener('change', () => syncSelectionWithActiveMode('start')));
+        if (selectionDurationInput) selectionDurationInput.addEventListener('input', () => {
+          if (getSelectionDurationMode() === 'fixed') syncSelectionWithActiveMode('start');
+        });
+        selectionPresetButtons.forEach((button) => {
+          button.addEventListener('click', () => setFixedSelectionDuration(button.dataset.selectionPreset));
+        });
         if (socialPlatform) socialPlatform.addEventListener('change', refreshSocialFormats);
         if (socialFormat) socialFormat.addEventListener('change', refreshSocialDurations);
+        if (socialDuration) socialDuration.addEventListener('change', () => syncSelectionWithActiveMode('start'));
 
         refreshSocialFormats();
         refreshMode();
         refreshCustomDuration();
+        refreshEmptySegments();
+        setSelection(0, getLockedSelectionDuration() || Math.min(60, videoDuration || 60));
       })();
     </script>
   {% else %}
 
-  <div class="box">
-    <h2>1. Vamos começar</h2>
-    <div class="actions-row">
-      <form action="{{ url_for('generate_transcription', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="generate_transcription" data-project-id="{{ project_id }}" data-keep-scroll="true">
-        <input type="hidden" name="scroll_y" value="0">
-        <button type="submit">Gerar Transcrição</button>
-      </form>
+  {% set step_2_done = transcript_text %}
+  {% set step_3_done = speaker_transcript and speaker_transcript.get("speakers") %}
+  {% set step_4_done = step_3_done and (metadata.get("speakers_reviewed") == "yes" or ai_request or ai_suggestions or selected_ai_cuts or cuts or processed_files) %}
+  {% set step_5_done = step_4_done and (ai_request or ai_suggestions) %}
+  {% set step_6_done = step_5_done and (selected_ai_cuts or cuts) %}
+  {% set step_7_done = step_6_done and (metadata.get("cuts_defined") == "yes" or cuts) %}
+  {% set step_8_done = step_7_done and cuts %}
+  {% set step_9_done = step_8_done and processed_files %}
+  {% set step_10_done = step_9_done and processed_files %}
 
-      <form action="{{ url_for('reset_project', project_id=project_id) }}" method="POST" data-keep-scroll="true">
-        <input type="hidden" name="scroll_y" value="0">
-        <button type="submit">Limpar</button>
-      </form>
+  {% if step_10_done %}
+    {% set current_project_step = 'section-8' %}
+  {% elif step_8_done %}
+    {% set current_project_step = 'section-7' %}
+  {% elif step_6_done %}
+    {% set current_project_step = 'section-5' %}
+  {% elif step_5_done %}
+    {% set current_project_step = 'section-4' %}
+  {% elif step_4_done %}
+    {% set current_project_step = 'step-ai' %}
+  {% elif step_3_done %}
+    {% set current_project_step = 'step-participants' %}
+  {% elif step_2_done %}
+    {% set current_project_step = 'step-speakers' %}
+  {% else %}
+    {% set current_project_step = '' %}
+  {% endif %}
 
-      <button type="button" class="magic-button" id="magic-button">
-        <span class="magic-text">Botão Mágico</span>
-        <span class="magic-particle dot-gold p1"></span>
-        <span class="magic-particle dot-cyan p2"></span>
-        <span class="magic-particle star p3"></span>
-        <span class="magic-particle dot-pink p4"></span>
-        <span class="magic-particle star p5"></span>
-        <span class="magic-particle dot-lime p6"></span>
-        <span class="magic-particle dot-gold p7"></span>
-        <span class="magic-particle dot-cyan p8"></span>
-      </button>
+  <div class="workspace-grid cuts-workspace">
+      <aside class="workspace-rail">
+        <span class="section-kicker">Fluxo</span>
+        <h3>Cortes inteligentes com I.A</h3>
+      <a href="#step-start" class="{% if step_2_done %}is-done{% endif %}">Começar</a>
+      <a href="#step-transcription" class="{% if step_2_done %}is-done{% endif %}">Transcrição</a>
+      <a href="#step-speakers" class="{% if step_3_done %}is-done{% endif %}">Mapeamento de participantes</a>
+      <a href="#step-participants" class="{% if step_4_done %}is-done{% endif %}">Identificação de participantes</a>
+      <a href="#step-ai" class="{% if step_5_done %}is-done{% endif %}">Sugerir cortes com IA</a>
+      <a href="#section-4" class="{% if step_6_done %}is-done{% endif %}">Sugestões da IA</a>
+      <a href="#section-5" class="{% if step_7_done %}is-done{% endif %}">Definir cortes manualmente</a>
+      <a href="#section-6" class="{% if step_8_done %}is-done{% endif %}">Cortes definidos</a>
+      <a href="#section-7" class="{% if step_9_done %}is-done{% endif %}">Processar cortes</a>
+      <a href="#section-8" class="{% if step_10_done %}is-done{% endif %}">Arquivos processados</a>
+    </aside>
+
+    <div class="workspace-main" data-project-steps data-current-step="{{ current_project_step }}">
+  <section class="box compact-step" id="step-start">
+    <div class="section-header">
+      <div>
+        <div class="step-heading">
+          <h2>
+            <span class="section-kicker">Etapa 1</span>
+            <span class="step-title">Vamos começar</span>
+          </h2>
+        </div>
+        <p class="hint">Gere a transcrição, limpe o projeto ou execute a sequência automática.</p>
+      </div>
     </div>
-  </div>
+    <div class="step-start-actions">
+      <div class="actions-row step-start-primary-actions">
+        <form action="{{ url_for('generate_transcription', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="generate_transcription" data-project-id="{{ project_id }}" data-keep-scroll="true">
+          <input type="hidden" name="scroll_y" value="0">
+          <button type="submit" data-tour-target="ai-start">Vamos começar!</button>
+        </form>
+        <button type="button" class="secondary-button" id="automation-button" data-tour-target="ai-automation">Automatizar</button>
+      </div>
 
-  <div class="box">
-    <h2>2. Transcrição</h2>
-    {% if transcript_text %}
-      <h3>Texto corrido</h3>
-      <textarea readonly>{{ transcript_text }}</textarea>
-      {% if transcript_srt_text %}
-        <h3 style="margin-top: 20px;">Transcrição com marcadores de tempo</h3>
-        <textarea readonly>{{ transcript_srt_text }}</textarea>
+      <div class="step-start-magic-action">
+        <form action="{{ url_for('reset_project', project_id=project_id) }}" method="POST" data-keep-scroll="true">
+          <input type="hidden" name="scroll_y" value="0">
+          <button type="submit" data-tour-target="ai-reset">Limpar etapas</button>
+        </form>
+
+        <button type="button" class="magic-button" id="magic-button" data-tour-target="ai-magic">
+          <span class="magic-text">Botão Mágico</span>
+          <span class="magic-particle dot-gold p1"></span>
+          <span class="magic-particle dot-cyan p2"></span>
+          <span class="magic-particle star p3"></span>
+          <span class="magic-particle dot-pink p4"></span>
+          <span class="magic-particle star p5"></span>
+          <span class="magic-particle dot-lime p6"></span>
+          <span class="magic-particle dot-gold p7"></span>
+          <span class="magic-particle dot-cyan p8"></span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="box compact-step project-step" id="step-transcription">
+    <div class="section-header">
+      <div>
+        <div class="step-heading">
+          <h2>
+            <span class="section-kicker">Etapa 2</span>
+            <span class="step-title">Transcrição</span>
+          </h2>
+        </div>
+        <p class="hint">Resumo rápido por padrão; o texto completo fica recolhido para manter a tela leve.</p>
+      </div>
+      <span class="step-elapsed{% if not step_elapsed.get("step_2") %} is-empty{% endif %}" {% if not step_elapsed.get("step_2") %}aria-hidden="true"{% endif %}>{{ step_elapsed.get("step_2") or "" }}</span>
+      {% if step_2_done %}
+        <span class="done-check" title="Concluída" aria-label="Transcrição concluída">✓</span>
       {% endif %}
-    {% else %}
-      <p>Nenhuma transcrição gerada ainda.</p>
-    {% endif %}
-  </div>
+    </div>
+    {% if transcript_text %}
+      <div class="project-summary summary-grid-with-expand">
+        <div class="summary-card">
+          <span class="summary-label">Texto corrido</span>
+          <span class="summary-value">{{ transcript_text|length }} caracteres</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">SRT</span>
+          <span class="summary-value">{% if transcript_srt_text %}{{ transcript_srt_text|length }} caracteres{% else %}Indisponível{% endif %}</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Revisão</span>
+          <span class="summary-value">
+            {% if metadata.get("transcription_revision_manual_reviewed") == "yes" %}
+              Revisada manualmente
+            {% elif metadata.get("transcription_revision_applied") == "yes" %}
+              IA aplicada · {{ metadata.get("transcription_revision_glossary_count", "0") }} termo(s)
+            {% elif revised_transcript_exists %}
+              Fallback original
+            {% else %}
+              Aguardando
+            {% endif %}
+          </span>
+        </div>
 
-  <div class="box">
-    <h2>3. Identificação de speakers</h2>
-    <p class="hint">Esta etapa usa diarização de áudio para identificar quem fala em cada trecho. Não é uma análise apenas do texto.</p>
+        <details class="evr-collapse expand-card" data-persist-key="transcription-{{ project_id }}">
+          <summary aria-label="Ver transcrição">
+            <span>Ver transcrição</span>
+            <span class="expand-icon" aria-hidden="true"></span>
+          </summary>
+          <div class="collapse-body">
+            {% if transcription_review_blocks %}
+              <div class="transcription-review-entry">
+                <button type="button" class="secondary-button" data-transcription-review-open>Revisar transcrição manualmente</button>
+                <span>Compare original e revisada antes de avançar para participantes e cortes.</span>
+              </div>
+            {% endif %}
+            <div class="textarea-block">
+              <h3>Transcrição Original - Whisper</h3>
+              <textarea readonly>{{ original_transcript_text or transcript_text }}</textarea>
+            </div>
+            <div class="textarea-block">
+              <h3>Transcrição Revisada - {{ transcription_revision_model_label }}</h3>
+              <textarea readonly>{{ transcript_text }}</textarea>
+            </div>
+            {% if transcript_srt_text %}
+              <div class="textarea-block">
+                <h3>Marcadores de Tempo</h3>
+                <textarea readonly>{{ transcript_srt_text }}</textarea>
+              </div>
+            {% endif %}
+          </div>
+        </details>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <strong>Nenhuma transcrição gerada ainda.</strong>
+        <span>Use a etapa 1 para gerar a transcrição com whisper.cpp.</span>
+      </div>
+    {% endif %}
+  </section>
+
+  {% if transcription_review_blocks %}
+    <div class="automation-modal transcription-review-modal" id="transcription-review-modal" hidden aria-hidden="true">
+      <div class="automation-backdrop" data-transcription-review-close></div>
+      <section class="automation-dialog transcription-review-dialog" role="dialog" aria-modal="true" aria-labelledby="transcription-review-title">
+        <button type="button" class="automation-close" data-transcription-review-close aria-label="Fechar">×</button>
+
+        <form id="transcription-review-form" action="{{ url_for('save_transcription_revision', project_id=project_id) }}" method="POST" data-keep-scroll="true">
+          <input type="hidden" name="scroll_y" value="0">
+
+          <div class="automation-head transcription-review-head">
+            <span class="section-kicker">Revisão manual</span>
+            <h3 id="transcription-review-title">Revisar transcrição manualmente</h3>
+            <p class="hint">Edite somente a transcrição revisada. Os marcadores de tempo ficam bloqueados para preservar o SRT.</p>
+          </div>
+
+          <div class="transcription-review-toolbar">
+            <div class="transcription-review-search-group">
+              <input type="search" id="transcription-review-search" placeholder="Buscar trecho, termo ou erro">
+              <button type="button" class="secondary-button transcription-search-button" id="transcription-review-run-search" aria-label="Buscar termo"><span>Buscar</span></button>
+            </div>
+            <button type="button" class="secondary-button" id="next-transcription-diff">Próxima diferença</button>
+            <button type="button" class="secondary-button" id="open-glossary-quick-add">Adicionar ao glossário</button>
+            <button type="submit" title="Atalho: Cmd+S">Salvar edições</button>
+          </div>
+          <div class="transcription-glossary-panel" id="transcription-glossary-panel" data-glossary-add-url="{{ url_for('add_glossary_term') }}" hidden>
+            <label>
+              <span>Termo correto</span>
+              <input type="text" id="quick-glossary-term" placeholder="Ex: Serpol">
+            </label>
+            <label>
+              <span>Variações comuns erradas</span>
+              <input type="text" id="quick-glossary-variants" placeholder="Ex: Serpó, Serpão">
+            </label>
+            <label>
+              <span>Contexto opcional</span>
+              <input type="text" id="quick-glossary-context" placeholder="Ex: Nome da empresa mencionada no podcast">
+            </label>
+            <div class="transcription-glossary-actions">
+              <button type="button" class="secondary-button" id="cancel-glossary-quick-add">Cancelar</button>
+              <button type="button" id="save-glossary-quick-add">Salvar no glossário</button>
+            </div>
+          </div>
+          <p class="transcription-review-status" id="transcription-review-status" role="status"></p>
+
+          <div class="transcription-review-list" id="transcription-review-list">
+            {% for block in transcription_review_blocks %}
+              <article class="transcription-review-block{% if block.is_different %} is-different{% endif %}" data-transcription-review-block data-different="{% if block.is_different %}true{% else %}false{% endif %}" data-reviewed="false">
+                <div class="transcription-review-time">
+                  <span class="transcription-review-check" aria-label="Revisado">✓</span>
+                  <span>{{ block.number }}</span>
+                  <strong>{{ block.time_line }}</strong>
+                </div>
+
+                <div class="transcription-review-columns">
+                  <div class="transcription-review-original">
+                    <h4>Original - Whisper</h4>
+                    <p data-original-text>{{ block.original_text }}</p>
+                  </div>
+
+                  <label class="transcription-review-revised">
+                    <span>Revisada - {{ transcription_revision_model_label }}</span>
+                    <textarea name="revision_text[]" rows="4">{{ block.revised_text }}</textarea>
+                  </label>
+                </div>
+
+                <div class="transcription-review-block-actions">
+                  <button type="button" class="secondary-button" data-play-transcription-sample>▶ Reproduzir trecho</button>
+                  <button type="button" class="secondary-button" data-restore-original>Restaurar original neste trecho</button>
+                </div>
+                <audio preload="none" src="{{ url_for('transcription_segment_sample', project_id=project_id, uid=block.uid) }}"></audio>
+                <input type="hidden" name="revision_uid[]" value="{{ block.uid }}">
+              </article>
+            {% endfor %}
+          </div>
+        </form>
+      </section>
+    </div>
+  {% endif %}
+
+  <section class="box compact-step project-step" id="step-speakers">
+    <div class="section-header">
+      <div>
+        <div class="step-heading">
+          <h2>
+            <span class="section-kicker">Etapa 3</span>
+            <span class="step-title">Mapeamento de participantes</span>
+          </h2>
+        </div>
+      </div>
+      <span class="step-elapsed{% if not step_elapsed.get("step_3") %} is-empty{% endif %}" {% if not step_elapsed.get("step_3") %}aria-hidden="true"{% endif %}>{{ step_elapsed.get("step_3") or "" }}</span>
+      {% if step_3_done %}
+        <span class="done-check" title="Concluída" aria-label="Mapeamento de participantes concluído">✓</span>
+      {% endif %}
+    </div>
 
     {% if transcript_srt_text %}
       <form action="{{ url_for('identify_speakers', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="identify_speakers" data-project-id="{{ project_id }}" data-keep-scroll="true">
@@ -777,7 +1823,7 @@
 
         <div class="margin-grid">
           <div class="margin-field">
-            <label for="num_speakers"><strong>Número exato de speakers</strong></label>
+            <label for="num_speakers"><strong>Número exato de participantes</strong></label>
             <input type="number" id="num_speakers" name="num_speakers" min="1" step="1" value="{{ speaker_settings.get('num_speakers', '') if speaker_settings else '' }}" placeholder="Ex: 2">
             <small>Use quando souber exatamente quantas pessoas falam.</small>
           </div>
@@ -792,17 +1838,34 @@
           </div>
         </div>
 
-        <button type="submit">Identificar speakers</button>
+        <button type="submit">Mapear participantes</button>
       </form>
     {% else %}
-      <button disabled>Identificar speakers</button>
+      <button disabled>Mapear participantes</button>
       <p class="hint">Gere a transcrição com marcadores de tempo primeiro.</p>
     {% endif %}
+  </section>
+
+  <section class="box compact-step project-step" id="step-participants">
+    <div class="section-header">
+      <div>
+        <div class="step-heading">
+          <h2>
+            <span class="section-kicker">Etapa 4</span>
+            <span class="step-title">Identificação de participantes</span>
+          </h2>
+        </div>
+        <p class="hint">Revise as vozes encontradas, use amostras e nomeie participantes antes da IA.</p>
+      </div>
+      <span class="step-elapsed is-empty" aria-hidden="true"></span>
+      {% if step_4_done %}
+        <span class="done-check" title="Concluída" aria-label="Identificação de participantes concluída">✓</span>
+      {% endif %}
+    </div>
 
     {% if speaker_transcript and speaker_transcript.get("speakers") %}
-      <div class="section-divider"></div>
-      <h3>Speakers encontrados</h3>
-      <p class="hint">Use a amostra de áudio para identificar cada pessoa, renomeie os speakers e salve antes de pedir os cortes.</p>
+      <h3>Participantes encontrados</h3>
+      <p class="hint">Use a amostra de áudio para identificar cada pessoa, renomeie os participantes e salve antes de pedir os cortes.</p>
 
       <form action="{{ url_for('save_speaker_settings', project_id=project_id) }}" method="POST" data-keep-scroll="true">
         <input type="hidden" name="scroll_y" value="0">
@@ -824,7 +1887,7 @@
             </div>
           {% endfor %}
         </div>
-        <button type="submit">Salvar nomes dos speakers</button>
+        <button type="submit">Salvar nomes dos participantes</button>
       </form>
 
       <script>
@@ -861,21 +1924,47 @@
         })();
       </script>
 
-      <h3 style="margin-top: 20px;">Transcrição com speakers</h3>
-      <textarea readonly>{% for segment in speaker_transcript.get("segments", []) %}[{{ segment.start }} - {{ segment.end }}] {{ segment.speaker_name or segment.speaker }}: {{ segment.text }}
+      <details class="evr-collapse icon-only" data-persist-key="speaker-transcription-{{ project_id }}">
+        <summary aria-label="Ver transcrição com participantes"></summary>
+        <div class="collapse-body">
+          <textarea readonly>{% for segment in speaker_transcript.get("segments", []) %}[{{ segment.start }} - {{ segment.end }}] {{ segment.speaker_name or segment.speaker }}: {{ segment.text }}
 {% endfor %}</textarea>
+        </div>
+      </details>
+    {% else %}
+      <div class="empty-state">
+        <strong>Nenhum participante mapeado ainda.</strong>
+        <span>Use a etapa anterior para mapear quem fala no vídeo.</span>
+      </div>
     {% endif %}
-  </div>
+  </section>
 
-  <div class="box">
-    <h2>4. Sugerir cortes com IA</h2>
+  <section class="box compact-step project-step" id="step-ai">
+    <div class="section-header">
+      <div>
+        <div class="step-heading">
+          <h2>
+            <span class="section-kicker">Etapa 5</span>
+            <span class="step-title">Sugerir cortes com IA</span>
+          </h2>
+        </div>
+        <p class="hint">Selecione participantes, refine o pedido e peça sugestões para a OpenAI.</p>
+      </div>
+      <span class="step-elapsed{% if not step_elapsed.get("step_5") %} is-empty{% endif %}" {% if not step_elapsed.get("step_5") %}aria-hidden="true"{% endif %}>{{ step_elapsed.get("step_5") or "" }}</span>
+      {% if step_5_done %}
+        <span class="done-check" title="Concluída" aria-label="Sugestão com IA concluída">✓</span>
+      {% endif %}
+    </div>
+
     {% if transcript_srt_text %}
       <form action="{{ url_for('suggest_cuts', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="suggest_cuts" data-project-id="{{ project_id }}" data-keep-scroll="true">
         <input type="hidden" name="scroll_y" value="0">
+        {% set ai_cut_option_count = ai_request.get("cut_option_count", 6) if ai_request else 6 %}
+        {% set ai_hook_option_count = ai_request.get("hook_option_count", 1) if ai_request else 1 %}
 
         {% if speaker_transcript and speaker_transcript.get("speakers") %}
-          <h3>Escolha os speakers para análise</h3>
-          <p class="hint">Se nenhum speaker for marcado, a IA analisará todos os speakers identificados.</p>
+          <h3>Escolha os participantes para análise</h3>
+          <p class="hint">Se nenhum participante for marcado, a IA analisará todos os participantes identificados.</p>
           <div class="speaker-grid">
             {% for speaker in speaker_transcript.get("speakers", []) %}
               <label class="speaker-checkbox">
@@ -889,24 +1978,57 @@
           </div>
         {% endif %}
 
+        <div class="ai-request-grid">
+          <label class="ai-request-field" for="cut_option_count">
+            <strong>Opções de corte</strong>
+            <input type="number" id="cut_option_count" name="cut_option_count" min="1" max="15" step="1" value="{{ ai_cut_option_count }}">
+            <small>Quantidade de conteúdos que a IA deve sugerir.</small>
+          </label>
+          <label class="ai-request-field" for="hook_option_count">
+            <strong>Ganchos por corte</strong>
+            <input type="number" id="hook_option_count" name="hook_option_count" min="1" max="5" step="1" value="{{ ai_hook_option_count }}">
+            <small>Alternativas de gancho dentro de cada conteúdo.</small>
+          </label>
+        </div>
+
         <h3>Pedido livre para a IA</h3>
         <textarea class="prompt-textarea" name="free_prompt" placeholder="Ex: Nesse episódio eu falei várias vezes sobre precificação. Quero cortes estratégicos, com opinião forte, sobre esse assunto.">{{ ai_request.get("free_prompt", "") if ai_request else "" }}</textarea>
 
         <button type="submit">Sugerir cortes com IA</button>
       </form>
-      <p class="hint">A IA vai sugerir pares de <strong>conteúdo + gancho</strong> com base na transcrição, speakers selecionados e pedido livre.</p>
     {% else %}
       <button disabled>Sugerir cortes com IA</button>
       <p class="hint">Gere a transcrição com marcadores de tempo primeiro.</p>
     {% endif %}
-  </div>
+  </section>
 
-  <div class="box" id="section-4">
-    <h2>5. Sugestões da IA</h2>
+  <section class="box project-step" id="section-4">
+    <div class="section-header">
+      <div>
+        <div class="step-heading">
+          <h2>
+            <span class="section-kicker">Etapa 6</span>
+            <span class="step-title">Sugestões da IA</span>
+          </h2>
+        </div>
+        <p class="hint">Escolha as sugestões que devem virar cortes editáveis.</p>
+      </div>
+      <span class="step-elapsed is-empty" aria-hidden="true"></span>
+      {% if step_6_done %}
+        <span class="done-check" title="Concluída" aria-label="Sugestões da IA concluídas">✓</span>
+      {% endif %}
+    </div>
     {% if ai_suggestions and ai_suggestions.get("cuts") %}
-      <form action="{{ url_for('use_ai_cuts', project_id=project_id) }}" method="POST" data-keep-scroll="true">
+      <form action="{{ url_for('use_ai_cuts', project_id=project_id) }}" method="POST" data-keep-scroll="true" data-ai-suggestions-form>
         <input type="hidden" name="scroll_y" value="0">
-        <div class="margin-grid">
+        <div class="margin-grid ai-suggestion-controls">
+          <label class="margin-field ai-select-all-control">
+            <strong>Selecionar todos</strong>
+            <span class="select-all-line">
+              <input type="checkbox" data-ai-select-all>
+              <small>Marca todas as sugestões desta lista.</small>
+            </span>
+          </label>
           <div class="margin-field">
             <label for="initial_margin_seconds"><strong>Margem de segurança (segundos): Inicial</strong></label>
             <input type="number" id="initial_margin_seconds" name="initial_margin_seconds" min="0" step="0.1" value="0">
@@ -920,33 +2042,155 @@
         </div>
 
         {% for item in ai_suggestions.get("cuts", []) %}
+          {% set suggestion_index = loop.index0 %}
+          {% set hook_options = item.get("hook_options", []) %}
           <div class="ai-card">
-            <label style="display:flex; gap:10px; align-items:flex-start;">
-              <input type="checkbox" name="selected_indexes" value="{{ loop.index0 }}" style="margin-top:4px;">
+            <div class="ai-card-layout">
+              <label class="ai-suggestion-check">
+                <input type="checkbox" name="selected_indexes" value="{{ suggestion_index }}" data-ai-suggestion-checkbox>
+              </label>
               <div style="flex:1;">
                 <h3>{{ item.title }}</h3>
-                <div class="ai-meta"><strong>Conteúdo:</strong> {{ item.content_start }} até {{ item.content_end }}</div>
-                <div class="ai-meta"><strong>Gancho:</strong> {{ item.hook_title }}<br>{{ item.hook_start }} até {{ item.hook_end }}</div>
-                <div class="ai-reason"><strong>Motivo:</strong> {{ item.reason }}</div>
+                <div class="ai-meta-grid">
+                  <div class="ai-meta"><strong>Conteúdo:</strong> {{ item.content_start }} até {{ item.content_end }}</div>
+                  <div class="ai-meta"><strong>Gancho:</strong> {{ item.hook_title }}<br>{{ item.hook_start }} até {{ item.hook_end }}</div>
+                </div>
+                <div class="ai-audio-row">
+                  <button type="button" class="secondary-button ai-audio-button" data-ai-audio-button data-audio-id="ai_content_audio_{{ loop.index0 }}">Reproduzir conteúdo</button>
+                  <audio id="ai_content_audio_{{ loop.index0 }}" preload="none" src="{{ url_for('ai_suggestion_sample', project_id=project_id, suggestion_index=loop.index0, segment_type='content') }}"></audio>
+                  <button type="button" class="secondary-button ai-audio-button" data-ai-audio-button data-audio-id="ai_hook_audio_{{ loop.index0 }}">Reproduzir gancho</button>
+                  <audio id="ai_hook_audio_{{ loop.index0 }}" preload="none" src="{{ url_for('ai_suggestion_sample', project_id=project_id, suggestion_index=loop.index0, segment_type='hook') }}"></audio>
+                </div>
+                {% if hook_options|length > 1 %}
+                  <div class="ai-hook-options">
+                    <strong>Opções de gancho</strong>
+                    {% for hook_option in hook_options %}
+                      <div class="ai-hook-option">
+                        <input type="radio" name="hook_option_{{ suggestion_index }}" value="{{ loop.index0 }}" {% if loop.first %}checked{% endif %}>
+                        <span>{{ hook_option.hook_title }} · {{ hook_option.hook_start }} até {{ hook_option.hook_end }}</span>
+                        <button type="button" class="secondary-button ai-audio-button" data-ai-audio-button data-audio-id="ai_hook_option_audio_{{ suggestion_index }}_{{ loop.index0 }}">Ouvir</button>
+                        <audio id="ai_hook_option_audio_{{ suggestion_index }}_{{ loop.index0 }}" preload="none" src="{{ url_for('ai_suggestion_sample', project_id=project_id, suggestion_index=suggestion_index, segment_type='hook_option_' ~ loop.index0) }}"></audio>
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+                <details class="inline-details">
+                  <summary>Ver motivo da sugestão</summary>
+                  <div class="ai-reason"><strong>Motivo:</strong> {{ item.reason }}</div>
+                </details>
               </div>
-            </label>
+            </div>
           </div>
         {% endfor %}
 
-        <button type="submit">Adicionar sugestões selecionadas</button>
+        <div class="actions-row ai-suggestion-actions">
+          <button type="submit" name="select_all" value="1" data-ai-add-all>Adicionar todas as sugestões</button>
+          <button type="submit" class="secondary-button" data-ai-add-selected disabled>Adicionar apenas selecionadas</button>
+        </div>
       </form>
-    {% else %}
-      <p>Nenhuma sugestão da IA ainda.</p>
-    {% endif %}
-  </div>
 
-  <div class="box" id="section-5">
-    <h2>6. Definir cortes manualmente</h2>
+      <script>
+        (function () {
+          const form = document.querySelector('[data-ai-suggestions-form]');
+          if (!form) return;
+
+          const selectAll = form.querySelector('[data-ai-select-all]');
+          const checkboxes = Array.from(form.querySelectorAll('[data-ai-suggestion-checkbox]'));
+          const addAllButton = form.querySelector('[data-ai-add-all]');
+          const addSelectedButton = form.querySelector('[data-ai-add-selected]');
+
+          function refreshSuggestionActions() {
+            const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+            if (selectAll) {
+              selectAll.checked = selectedCount > 0 && selectedCount === checkboxes.length;
+              selectAll.indeterminate = selectedCount > 0 && selectedCount < checkboxes.length;
+            }
+            if (addAllButton) addAllButton.disabled = selectedCount > 0;
+            if (addSelectedButton) addSelectedButton.disabled = selectedCount === 0;
+          }
+
+          if (selectAll) {
+            selectAll.addEventListener('change', () => {
+              checkboxes.forEach((checkbox) => {
+                checkbox.checked = selectAll.checked;
+              });
+              refreshSuggestionActions();
+            });
+          }
+
+          checkboxes.forEach((checkbox) => {
+            checkbox.addEventListener('change', refreshSuggestionActions);
+          });
+
+          form.querySelectorAll('[data-ai-audio-button]').forEach((button) => {
+            const audio = document.getElementById(button.dataset.audioId);
+            if (!audio) return;
+            const originalText = button.textContent;
+            button.dataset.originalText = originalText;
+
+            audio.addEventListener('ended', () => {
+              button.textContent = originalText;
+            });
+
+            button.addEventListener('click', () => {
+              form.querySelectorAll('[data-ai-audio-button]').forEach((otherButton) => {
+                const otherAudio = document.getElementById(otherButton.dataset.audioId);
+                if (otherAudio && otherAudio !== audio) {
+                  otherAudio.pause();
+                  otherAudio.currentTime = 0;
+                  otherButton.textContent = otherButton.dataset.originalText || otherButton.textContent;
+                }
+              });
+
+              if (audio.paused) {
+                audio.play();
+                button.textContent = 'Parar';
+              } else {
+                audio.pause();
+                audio.currentTime = 0;
+                button.textContent = originalText;
+              }
+            });
+          });
+
+          refreshSuggestionActions();
+        })();
+      </script>
+    {% else %}
+      <div class="empty-state">
+        <strong>Nenhuma sugestão da IA ainda.</strong>
+        <span>Use a etapa anterior para gerar uma lista organizada de cortes.</span>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="box project-step" id="section-5">
+    <div class="section-header">
+      <div>
+        <div class="step-heading">
+          <h2>
+            <span class="section-kicker">Etapa 7</span>
+            <span class="step-title">Definir cortes manualmente</span>
+          </h2>
+        </div>
+        <p class="hint">Revise sugestões, ajuste tempos ou cadastre cortes extras.</p>
+      </div>
+      <span class="step-elapsed is-empty" aria-hidden="true"></span>
+      {% if step_7_done %}
+        <span class="done-check" title="Concluída" aria-label="Definição de cortes concluída">✓</span>
+      {% endif %}
+    </div>
     {% if metadata.get("transcription_generated") == "yes" %}
       <form id="define-cuts-form" action="{{ url_for('save_cuts', project_id=project_id) }}" method="POST" data-keep-scroll="true">
         <input type="hidden" name="scroll_y" value="0">
 
         <h3>Conteúdo principal</h3>
+        <div class="cut-row-heading" aria-hidden="true">
+          <span>Início</span>
+          <span>Fim</span>
+          <span>Nome do corte</span>
+          <span></span>
+        </div>
         {% if selected_ai_cuts %}
           {% for item in selected_ai_cuts %}
             <div class="cut-row">
@@ -962,9 +2206,10 @@
               </div>
               <div class="name-field">
                 <label>Nome do corte</label>
-                <input type="text" name="name[]" placeholder="Ex: Conteúdo 01 - Nome do corte" value="{{ 'Conteúdo %02d - %s' % (next_cut_number + loop.index0, item.title) }}">
+                <input type="text" name="name[]" placeholder="Ex: Conteúdo 01 - Nome do corte" value="{{ 'Conteúdo %02d - %s' % (next_cut_number + loop.index0, item.title) }}" data-auto-cut-name data-cut-kind="content" data-cut-title="{{ item.title }}">
                 <small>Conteúdo principal sugerido pela IA</small>
               </div>
+              <button type="button" class="delete-button cut-row-remove" data-remove-cut-row title="Excluir linha" aria-label="Excluir linha"></button>
             </div>
           {% endfor %}
         {% else %}
@@ -981,13 +2226,20 @@
             </div>
             <div class="name-field">
               <label>Nome do corte</label>
-              <input type="text" name="name[]" placeholder="Ex: Conteúdo 01 - Nome do corte">
+              <input type="text" name="name[]" placeholder="Ex: Conteúdo 01 - Nome do corte" data-auto-cut-name data-cut-kind="content" data-cut-title="Nome do corte">
               <small>Conteúdo principal</small>
             </div>
+            <button type="button" class="delete-button cut-row-remove" data-remove-cut-row title="Excluir linha" aria-label="Excluir linha"></button>
           </div>
         {% endif %}
 
         <h3>Gancho</h3>
+        <div class="cut-row-heading" aria-hidden="true">
+          <span>Início</span>
+          <span>Fim</span>
+          <span>Nome do corte</span>
+          <span></span>
+        </div>
         {% if selected_ai_cuts %}
           {% for item in selected_ai_cuts %}
             <div class="cut-row">
@@ -1003,9 +2255,10 @@
               </div>
               <div class="name-field">
                 <label>Nome do corte</label>
-                <input type="text" name="name[]" placeholder="Ex: Gancho 01 - Nome do gancho" value="{{ 'Gancho %02d - %s' % (next_cut_number + loop.index0, item.hook_title) }}">
+                <input type="text" name="name[]" placeholder="Ex: Gancho 01 - Nome do gancho" value="{{ 'Gancho %02d - %s' % (next_cut_number + loop.index0, item.hook_title) }}" data-auto-cut-name data-cut-kind="hook" data-cut-title="{{ item.hook_title }}">
                 <small>Gancho sugerido pela IA</small>
               </div>
+              <button type="button" class="delete-button cut-row-remove" data-remove-cut-row title="Excluir linha" aria-label="Excluir linha"></button>
             </div>
           {% endfor %}
         {% else %}
@@ -1022,16 +2275,31 @@
             </div>
             <div class="name-field">
               <label>Nome do corte</label>
-              <input type="text" name="name[]" placeholder="Ex: Gancho 01 - Nome do gancho">
+              <input type="text" name="name[]" placeholder="Ex: Gancho 01 - Nome do gancho" data-auto-cut-name data-cut-kind="hook" data-cut-title="Nome do gancho">
               <small>Gancho</small>
             </div>
+            <button type="button" class="delete-button cut-row-remove" data-remove-cut-row title="Excluir linha" aria-label="Excluir linha"></button>
           </div>
         {% endif %}
 
         <div class="section-divider"></div>
-        <h3>Linhas extras opcionais</h3>
-        {% for i in range(3) %}
-          <div class="cut-row">
+        <div class="manual-extra-header">
+          <h3>Linhas extras opcionais</h3>
+          <div class="actions-row">
+            <button type="button" class="secondary-button" data-add-extra-cut-row>Adicionar nova linha</button>
+            <button type="button" class="secondary-button" data-clear-cut-form>Limpar</button>
+          </div>
+        </div>
+        <div class="cut-row-heading extra-cut-heading is-hidden" data-extra-cut-heading aria-hidden="true">
+          <span>Início</span>
+          <span>Fim</span>
+          <span>Nome do corte</span>
+          <span></span>
+        </div>
+        <div data-extra-cut-rows></div>
+
+        <template id="extra-cut-row-template">
+          <div class="cut-row extra-cut-row">
             <div class="time-field">
               <label>Início</label>
               <input type="time" step="1" name="start[]">
@@ -1044,30 +2312,131 @@
             </div>
             <div class="name-field">
               <label>Nome do corte</label>
-              <input type="text" name="name[]" placeholder="Ex: corte_extra_{{ i + 1 }}">
+              <input type="text" name="name[]" placeholder="Ex: corte_extra_01" data-auto-cut-name data-cut-kind="extra" data-cut-title="">
               <small>Opcional</small>
             </div>
+            <button type="button" class="delete-button cut-row-remove" data-remove-cut-row title="Excluir linha" aria-label="Excluir linha"></button>
           </div>
-        {% endfor %}
+        </template>
 
-        <button type="submit">Definir cortes</button>
+        <div class="actions-row">
+          <button type="submit">Definir cortes</button>
+        </div>
       </form>
+
+      <script>
+        (function () {
+          const form = document.getElementById('define-cuts-form');
+          if (!form) return;
+
+          const extraRows = form.querySelector('[data-extra-cut-rows]');
+          const template = document.getElementById('extra-cut-row-template');
+          const addButton = form.querySelector('[data-add-extra-cut-row]');
+          const clearButton = form.querySelector('[data-clear-cut-form]');
+          const extraCutHeading = form.querySelector('[data-extra-cut-heading]');
+
+          function buildAutoName(input, index) {
+            const kind = input.dataset.cutKind || 'extra';
+            const title = (input.dataset.cutTitle || '').trim();
+            if (kind === 'content') return `Conteúdo ${String(index).padStart(2, '0')} - ${title || 'Nome do corte'}`;
+            if (kind === 'hook') return `Gancho ${String(index).padStart(2, '0')} - ${title || 'Nome do gancho'}`;
+            return `corte_extra_${String(index).padStart(2, '0')}`;
+          }
+
+          function refreshAutoCutNames() {
+            const counters = { content: 0, hook: 0, extra: 0 };
+            form.querySelectorAll('[data-auto-cut-name]').forEach((input) => {
+              const kind = input.dataset.cutKind || 'extra';
+              counters[kind] = (counters[kind] || 0) + 1;
+              const nextValue = buildAutoName(input, counters[kind]);
+              if (input.dataset.userEdited === 'yes') return;
+              input.value = nextValue;
+              input.dataset.autoValue = nextValue;
+            });
+            if (extraCutHeading && extraRows) {
+              extraCutHeading.classList.toggle('is-hidden', !extraRows.querySelector('.cut-row'));
+            }
+          }
+
+          function trackAutoNameInput(input) {
+            input.dataset.autoValue = input.value || '';
+            input.addEventListener('input', () => {
+              input.dataset.userEdited = input.value !== (input.dataset.autoValue || '') ? 'yes' : 'no';
+            });
+          }
+
+          form.querySelectorAll('[data-auto-cut-name]').forEach(trackAutoNameInput);
+
+          function wireRemoveButton(row) {
+            const removeButton = row.querySelector('[data-remove-cut-row]');
+            if (!removeButton) return;
+            removeButton.addEventListener('click', () => {
+              row.remove();
+              refreshAutoCutNames();
+            });
+          }
+
+          form.querySelectorAll('[data-remove-cut-row]').forEach((button) => {
+            button.addEventListener('click', () => {
+              const row = button.closest('.cut-row');
+              if (row) {
+                row.remove();
+                refreshAutoCutNames();
+              }
+            });
+          });
+
+          if (addButton && extraRows && template) {
+            addButton.addEventListener('click', () => {
+              const fragment = template.content.cloneNode(true);
+              const row = fragment.querySelector('.cut-row');
+              if (row) {
+                wireRemoveButton(row);
+                row.querySelectorAll('[data-auto-cut-name]').forEach(trackAutoNameInput);
+              }
+              extraRows.appendChild(fragment);
+              refreshAutoCutNames();
+            });
+          }
+
+          if (clearButton) {
+            clearButton.addEventListener('click', () => {
+              form.querySelectorAll('.cut-row').forEach((row) => {
+                row.remove();
+              });
+              if (extraRows) extraRows.innerHTML = '';
+              refreshAutoCutNames();
+            });
+          }
+
+          refreshAutoCutNames();
+        })();
+      </script>
     {% else %}
       <button disabled>Definir cortes</button>
       <p class="hint">Gere a transcrição primeiro.</p>
     {% endif %}
-  </div>
+  </section>
 
-  <div class="box" id="section-6">
-    <h2>7. Cortes definidos</h2>
+  <section class="box project-step" id="section-6">
+    <div class="section-header">
+      <div>
+        <div class="step-heading">
+          <h2>
+            <span class="section-kicker">Etapa 8</span>
+            <span class="step-title">Cortes definidos</span>
+          </h2>
+        </div>
+      </div>
+      <span class="step-elapsed is-empty" aria-hidden="true"></span>
+      {% if step_8_done %}
+        <span class="done-check" title="Concluída" aria-label="Fila de cortes concluída">✓</span>
+      {% endif %}
+    </div>
     {% if cuts %}
       <ul class="cut-list">
         {% for cut in cuts %}
           <li class="cut-item">
-            <form method="POST" action="{{ url_for('delete_cut', project_id=project_id, cut_index=loop.index0) }}" class="delete-form" data-keep-scroll="true">
-              <input type="hidden" name="scroll_y" value="0">
-              <button type="submit" class="delete-button" title="Excluir">🗑️</button>
-            </form>
             <div class="cut-item-main">
               <strong>{{ cut.name }}</strong>
               <span>{{ cut.start }} até {{ cut.end }}</span>
@@ -1077,16 +2446,91 @@
                 {% if cut.status == 'processed' %}Processado{% elif cut.status == 'error' %}Erro{% else %}Pendente{% endif %}
               </span>
             </div>
+            <form method="POST" action="{{ url_for('delete_cut', project_id=project_id, cut_index=loop.index0) }}" class="delete-form cut-delete-form" data-cut-delete-form data-delete-url-base="{{ url_for('delete_cut', project_id=project_id, cut_index=0).rsplit('/0', 1)[0] }}" data-keep-scroll="true">
+              <input type="hidden" name="scroll_y" value="0">
+              <button type="submit" class="delete-button cut-row-remove" title="Excluir corte" aria-label="Excluir corte"></button>
+            </form>
           </li>
         {% endfor %}
       </ul>
-    {% else %}
-      <p>Nenhum corte definido ainda.</p>
-    {% endif %}
-  </div>
+      <form method="POST" action="{{ url_for('clear_cuts', project_id=project_id) }}" class="cuts-clear-form" data-keep-scroll="true" onsubmit="return confirm('Limpar todos os cortes definidos?');">
+        <input type="hidden" name="scroll_y" value="0">
+        <button type="submit" class="secondary-button">Limpar</button>
+      </form>
+      <script>
+        (function () {
+          const list = document.querySelector('#section-6 .cut-list');
+          if (!list) return;
 
-  <div class="box" id="section-7">
-    <h2>8. Processar cortes</h2>
+          function refreshDeleteUrls() {
+            list.querySelectorAll('[data-cut-delete-form]').forEach((form, index) => {
+              const base = form.dataset.deleteUrlBase;
+              if (base) form.action = `${base}/${index}`;
+            });
+          }
+
+          list.querySelectorAll('[data-cut-delete-form]').forEach((form) => {
+            form.addEventListener('submit', async (event) => {
+              event.preventDefault();
+              const button = form.querySelector('button');
+              if (button) button.disabled = true;
+
+              try {
+                const response = await fetch(form.action, {
+                  method: 'POST',
+                  headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                const data = await response.json();
+                if (!response.ok || !data.ok) throw new Error(data.message || 'Falha ao excluir corte.');
+
+                const item = form.closest('.cut-item');
+                if (item) item.remove();
+                refreshDeleteUrls();
+
+                if (!list.querySelector('.cut-item')) {
+                  const clearForm = document.querySelector('#section-6 .cuts-clear-form');
+                  if (clearForm) clearForm.remove();
+                  list.insertAdjacentHTML('afterend', '<div class="empty-state"><strong>Nenhum corte definido ainda.</strong><span>Adicione sugestões da IA ou preencha cortes manualmente.</span></div>');
+                  list.remove();
+                  const processForm = document.querySelector('#section-7 form[action*="/process_cuts/"]');
+                  if (processForm) {
+                    const processButton = processForm.querySelector('button');
+                    processForm.removeAttribute('data-progress-job');
+                    if (processButton) processButton.disabled = true;
+                  }
+                }
+              } catch (error) {
+                if (button) button.disabled = false;
+                alert(error.message || 'Falha ao excluir corte.');
+              }
+            });
+          });
+        })();
+      </script>
+    {% else %}
+      <div class="empty-state">
+        <strong>Nenhum corte definido ainda.</strong>
+        <span>Adicione sugestões da IA ou preencha cortes manualmente.</span>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="box project-step" id="section-7">
+    <div class="section-header">
+      <div>
+        <div class="step-heading">
+          <h2>
+            <span class="section-kicker">Etapa 9</span>
+            <span class="step-title">Processar cortes</span>
+          </h2>
+        </div>
+        <p class="hint">Renderize os cortes definidos com FFmpeg.</p>
+      </div>
+      <span class="step-elapsed{% if not step_elapsed.get("step_9") %} is-empty{% endif %}" {% if not step_elapsed.get("step_9") %}aria-hidden="true"{% endif %}>{{ step_elapsed.get("step_9") or "" }}</span>
+      {% if step_9_done %}
+        <span class="done-check" title="Concluída" aria-label="Processamento concluído">✓</span>
+      {% endif %}
+    </div>
     {% if metadata.get("cuts_defined") == "yes" %}
       <form action="{{ url_for('process_cuts', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="process_cuts" data-project-id="{{ project_id }}" data-keep-scroll="true">
         <input type="hidden" name="scroll_y" value="0">
@@ -1096,31 +2540,525 @@
       <button disabled>Processar cortes</button>
       <p class="hint">Defina os cortes primeiro.</p>
     {% endif %}
-  </div>
+  </section>
 
-  <div class="box" id="section-8">
-    <h2>9. Arquivos processados</h2>
+  <section class="box project-step" id="section-8">
+    <div class="section-header">
+      <div>
+        <div class="step-heading">
+          <h2>
+            <span class="section-kicker">Etapa 10</span>
+            <span class="step-title">Arquivos processados</span>
+          </h2>
+        </div>
+      </div>
+      <span class="step-elapsed is-empty" aria-hidden="true"></span>
+      {% if step_10_done %}
+        <span class="done-check" title="Concluída" aria-label="Arquivos processados concluídos">✓</span>
+      {% endif %}
+    </div>
     {% if processed_files %}
-      <ul>
+      <ul class="file-list">
         {% for file in processed_files %}
-          <li>{{ file }}</li>
+          <li class="file-card">
+            <span class="file-name">{{ file }}</span>
+            <div class="file-actions">
+              <form action="{{ url_for('open_processed_file', project_id=project_id, filename=file) }}" method="POST" data-file-open-form>
+                <button type="submit" class="secondary-button">Reproduzir</button>
+              </form>
+              <form action="{{ url_for('delete_processed_file', project_id=project_id, filename=file) }}" method="POST" data-file-delete-form>
+                <button type="submit" class="delete-button cut-row-remove" title="Excluir arquivo" aria-label="Excluir arquivo"></button>
+              </form>
+            </div>
+          </li>
         {% endfor %}
       </ul>
       <p class="hint">Os arquivos estão na pasta Processados dentro da pasta deste projeto.</p>
       <form action="{{ url_for('open_project_folder', project_id=project_id) }}" method="POST" style="margin-top: 12px;">
         <button type="submit">Abrir pasta do projeto</button>
       </form>
+      <script>
+        (function () {
+          const section = document.getElementById('section-8');
+          if (!section) return;
+          const list = section.querySelector('.file-list');
+          if (!list) return;
+
+          section.querySelectorAll('[data-file-open-form]').forEach((form) => {
+            form.addEventListener('submit', async (event) => {
+              event.preventDefault();
+              const button = form.querySelector('button');
+              if (button) button.disabled = true;
+
+              try {
+                const response = await fetch(form.action, {
+                  method: 'POST',
+                  headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                const data = await response.json();
+                if (!response.ok || !data.ok) throw new Error(data.message || 'Falha ao abrir arquivo.');
+              } catch (error) {
+                alert(error.message || 'Falha ao abrir arquivo.');
+              } finally {
+                if (button) button.disabled = false;
+              }
+            });
+          });
+
+          section.querySelectorAll('[data-file-delete-form]').forEach((form) => {
+            form.addEventListener('submit', async (event) => {
+              event.preventDefault();
+              const button = form.querySelector('button');
+              if (button) button.disabled = true;
+
+              try {
+                const response = await fetch(form.action, {
+                  method: 'POST',
+                  headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+                const data = await response.json();
+                if (!response.ok || !data.ok) throw new Error(data.message || 'Falha ao excluir arquivo.');
+
+                const item = form.closest('.file-card');
+                if (item) item.remove();
+
+                if (!list.querySelector('.file-card')) {
+                  section.querySelector('.done-check')?.remove();
+                  section.querySelector('.hint')?.remove();
+                  section.querySelector('form[action*="/open_project_folder/"]')?.remove();
+                  list.insertAdjacentHTML('afterend', '<div class="empty-state"><strong>Nenhum arquivo processado ainda.</strong><span>Depois de processar cortes, os arquivos aparecem aqui.</span></div>');
+                  list.remove();
+                }
+              } catch (error) {
+                if (button) button.disabled = false;
+                alert(error.message || 'Falha ao excluir arquivo.');
+              }
+            });
+          });
+        })();
+      </script>
     {% else %}
-      <p>Nenhum arquivo processado ainda.</p>
+      <div class="empty-state">
+        <strong>Nenhum arquivo processado ainda.</strong>
+        <span>Depois de processar cortes, os arquivos aparecem aqui.</span>
+      </div>
     {% endif %}
+  </section>
+
+  <div class="automation-modal" id="automation-modal" hidden aria-hidden="true">
+    <div class="automation-backdrop" data-automation-close></div>
+    <section class="automation-dialog" role="dialog" aria-modal="true" aria-labelledby="automation-title">
+      <button type="button" class="automation-close" data-automation-close aria-label="Fechar">×</button>
+      <div class="automation-head">
+        <span class="section-kicker">Automação guiada</span>
+        <h3 id="automation-title">Escolha onde quer assumir</h3>
+        <p class="hint">A automação sempre respeita a ordem das etapas. Você escolhe o ponto de parada; tudo antes dele roda em sequência.</p>
+      </div>
+
+      <div class="automation-options" role="radiogroup" aria-label="Ponto de parada da automação">
+        <label class="automation-option">
+          <input type="radio" name="automation_target" value="step_2">
+          <span>
+            <strong>Até etapa 2</strong>
+            <small>Gera a transcrição e para no mapeamento de participantes.</small>
+          </span>
+        </label>
+        <label class="automation-option">
+          <input type="radio" name="automation_target" value="step_3">
+          <span>
+            <strong>Até etapa 3</strong>
+            <small>Gera transcrição, mapeia participantes e para na identificação.</small>
+          </span>
+        </label>
+        <label class="automation-option">
+          <input type="radio" name="automation_target" value="step_5">
+          <span>
+            <strong>Até etapa 5</strong>
+            <small>Aceita os participantes atuais, pede sugestões à IA e para na lista.</small>
+          </span>
+        </label>
+        <label class="automation-option">
+          <input type="radio" name="automation_target" value="step_6" checked>
+          <span>
+            <strong>Até etapa 6</strong>
+            <small>Seleciona todas as sugestões e deixa você assumir na etapa 7.</small>
+          </span>
+        </label>
+        <label class="automation-option">
+          <input type="radio" name="automation_target" value="step_8">
+          <span>
+            <strong>Até etapa 8</strong>
+            <small>Converte as sugestões em cortes definidos e para antes de processar.</small>
+          </span>
+        </label>
+        <label class="automation-option">
+          <input type="radio" name="automation_target" value="final">
+          <span>
+            <strong>Entrega final</strong>
+            <small>Executa tudo até gerar os arquivos processados.</small>
+          </span>
+        </label>
+      </div>
+
+      <div class="automation-actions">
+        <button type="button" class="secondary-button" data-automation-close>Cancelar</button>
+        <button type="button" id="automation-start-button">Iniciar automação</button>
+      </div>
+    </section>
+  </div>
+  </div>
   </div>
 
-  <div class="magic-overlay" id="magic-overlay" aria-hidden="true">
-    <div class="magic-overlay-inner">
-      <img id="magic-overlay-gif" src="" alt="Processamento mágico em andamento">
-      <div class="magic-overlay-caption">A mágica está acontecendo...</div>
-    </div>
-  </div>
+  <script>
+    (function () {
+      const modal = document.getElementById('transcription-review-modal');
+      const openButtons = document.querySelectorAll('[data-transcription-review-open]');
+      const closeButtons = document.querySelectorAll('[data-transcription-review-close]');
+      const form = document.getElementById('transcription-review-form');
+      const search = document.getElementById('transcription-review-search');
+      const runSearchButton = document.getElementById('transcription-review-run-search');
+      const nextDiffButton = document.getElementById('next-transcription-diff');
+      const list = document.getElementById('transcription-review-list');
+      const status = document.getElementById('transcription-review-status');
+      const glossaryPanel = document.getElementById('transcription-glossary-panel');
+      const openGlossaryButton = document.getElementById('open-glossary-quick-add');
+      const cancelGlossaryButton = document.getElementById('cancel-glossary-quick-add');
+      const saveGlossaryButton = document.getElementById('save-glossary-quick-add');
+      const quickGlossaryTerm = document.getElementById('quick-glossary-term');
+      const quickGlossaryVariants = document.getElementById('quick-glossary-variants');
+      const quickGlossaryContext = document.getElementById('quick-glossary-context');
+      if (!modal || !form || !list) return;
+      let diffCursor = -1;
+      let searchTerm = '';
+      let searchResults = [];
+      let searchCursor = -1;
+      let activeAudio = null;
+
+      function openModal() {
+        modal.hidden = false;
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+        updateDiffStatus();
+        window.requestAnimationFrame(() => {
+          const firstTextarea = modal.querySelector('textarea[name="revision_text[]"]');
+          if (firstTextarea) firstTextarea.focus();
+        });
+      }
+
+      function closeModal() {
+        if (activeAudio) {
+          activeAudio.pause();
+          activeAudio.currentTime = 0;
+          activeAudio = null;
+          resetAudioButtons();
+        }
+        modal.hidden = true;
+        modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+      }
+
+      function visibleBlocks() {
+        return Array.from(list.querySelectorAll('[data-transcription-review-block]')).filter((block) => !block.hidden);
+      }
+
+      function pendingDifferenceBlocks() {
+        return visibleBlocks().filter((block) => block.dataset.different === 'true' && block.dataset.reviewed !== 'true');
+      }
+
+      function setStatus(message) {
+        if (status) status.textContent = message || '';
+      }
+
+      function updateDiffStatus(message) {
+        const total = visibleBlocks().filter((block) => block.dataset.different === 'true').length;
+        const pending = pendingDifferenceBlocks().length;
+        if (message) {
+          setStatus(message);
+        } else if (!total) {
+          setStatus('Nenhuma diferença detectada nesta busca.');
+        } else if (!pending) {
+          setStatus('Todas as diferenças visíveis foram revisadas.');
+        } else {
+          setStatus(`${pending} diferença(s) pendente(s) de revisão.`);
+        }
+      }
+
+      function normalizeSearchText(value) {
+        return String(value || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+      }
+
+      function clearSearchState() {
+        searchTerm = '';
+        searchResults = [];
+        searchCursor = -1;
+        list.querySelectorAll('[data-transcription-review-block]').forEach((block) => {
+          block.hidden = false;
+          block.classList.remove('is-search-match', 'is-search-active', 'is-pulsing');
+        });
+        diffCursor = -1;
+      }
+
+      function prepareSearchResults(rawTerm) {
+        const term = rawTerm.trim();
+        const normalizedTerm = normalizeSearchText(term);
+        searchTerm = normalizedTerm;
+        searchResults = [];
+        searchCursor = -1;
+
+        list.querySelectorAll('[data-transcription-review-block]').forEach((block) => {
+          const matches = normalizedTerm ? normalizeSearchText(block.textContent).includes(normalizedTerm) : true;
+          block.hidden = Boolean(normalizedTerm && !matches);
+          block.classList.toggle('is-search-match', Boolean(normalizedTerm && matches));
+          block.classList.remove('is-search-active', 'is-pulsing');
+          if (normalizedTerm && matches) searchResults.push(block);
+        });
+        diffCursor = -1;
+      }
+
+      function activateSearchResult(index, options = {}) {
+        if (!searchResults.length) return;
+        searchResults.forEach((block) => block.classList.remove('is-search-active', 'is-pulsing'));
+        searchCursor = (index + searchResults.length) % searchResults.length;
+        const target = searchResults[searchCursor];
+        target.classList.add('is-search-active', 'is-pulsing');
+        setTimeout(() => target.classList.remove('is-pulsing'), 650);
+        if (options.scroll !== false) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        setStatus(`${searchCursor + 1} de ${searchResults.length} resultado(s) para "${search.value.trim()}".`);
+      }
+
+      function runSearchNavigation() {
+        const term = (search?.value || '').trim();
+        if (!term) {
+          clearSearchState();
+          updateDiffStatus();
+          return;
+        }
+
+        const normalizedTerm = normalizeSearchText(term);
+        if (normalizedTerm !== searchTerm || !searchResults.length) {
+          prepareSearchResults(term);
+        }
+
+        if (!searchResults.length) {
+          updateDiffStatus(`Nenhum trecho encontrado para "${search.value.trim()}".`);
+          return;
+        }
+
+        activateSearchResult(searchCursor + 1);
+      }
+
+      function goToNextDifference() {
+        const blocks = pendingDifferenceBlocks();
+        if (!blocks.length) {
+          updateDiffStatus('Todas as diferenças visíveis foram revisadas.');
+          return;
+        }
+        const wrapped = diffCursor + 1 >= blocks.length;
+        diffCursor = wrapped ? 0 : diffCursor + 1;
+        const target = blocks[diffCursor];
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        target.classList.add('is-pulsing');
+        setTimeout(() => target.classList.remove('is-pulsing'), 650);
+        updateDiffStatus(wrapped ? 'Voltando para a primeira diferença pendente.' : `${diffCursor + 1} de ${blocks.length} diferença(s) pendente(s).`);
+      }
+
+      openButtons.forEach((button) => button.addEventListener('click', openModal));
+      closeButtons.forEach((button) => button.addEventListener('click', closeModal));
+      if (runSearchButton) runSearchButton.addEventListener('click', runSearchNavigation);
+      if (search) {
+        search.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          runSearchNavigation();
+        });
+        search.addEventListener('input', () => {
+          const term = (search.value || '').trim();
+          if (!term) {
+            clearSearchState();
+            updateDiffStatus();
+            return;
+          }
+          if (normalizeSearchText(term) !== searchTerm) {
+            clearSearchState();
+            setStatus('Pressione Enter ou clique na lupa para buscar.');
+          }
+        });
+      }
+      if (nextDiffButton) nextDiffButton.addEventListener('click', goToNextDifference);
+
+      function getSelectedReviewText() {
+        const active = document.activeElement;
+        if (
+          active &&
+          (active.matches('textarea[name="revision_text[]"]') || active.matches('#transcription-review-search')) &&
+          active.selectionStart !== active.selectionEnd
+        ) {
+          return active.value.slice(active.selectionStart, active.selectionEnd).trim();
+        }
+        const selectionObject = window.getSelection ? window.getSelection() : null;
+        const selection = selectionObject ? String(selectionObject).trim() : '';
+        if (selection && selectionObject.anchorNode && modal.contains(selectionObject.anchorNode)) return selection;
+        return (search?.value || '').trim();
+      }
+
+      function openGlossaryPanel() {
+        if (!glossaryPanel) return;
+        const selectedText = getSelectedReviewText();
+        glossaryPanel.hidden = false;
+        if (quickGlossaryVariants && selectedText && !quickGlossaryVariants.value.trim()) {
+          quickGlossaryVariants.value = selectedText;
+        }
+        setStatus(selectedText ? `Usei "${selectedText}" como variação sugerida para o glossário.` : 'Preencha o termo correto para adicionar ao glossário.');
+        if (quickGlossaryTerm) quickGlossaryTerm.focus();
+      }
+
+      function closeGlossaryPanel() {
+        if (!glossaryPanel) return;
+        glossaryPanel.hidden = true;
+      }
+
+      async function saveQuickGlossaryTerm() {
+        if (!glossaryPanel || !saveGlossaryButton) return;
+        const term = (quickGlossaryTerm?.value || '').trim();
+        if (!term) {
+          setStatus('Informe o termo correto antes de salvar no glossário.');
+          quickGlossaryTerm?.focus();
+          return;
+        }
+
+        const originalText = saveGlossaryButton.textContent;
+        saveGlossaryButton.disabled = true;
+        saveGlossaryButton.textContent = 'Salvando...';
+
+        try {
+          const response = await fetch(glossaryPanel.dataset.glossaryAddUrl, {
+            method: 'POST',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+            },
+            body: new URLSearchParams({
+              term,
+              variants: quickGlossaryVariants?.value || '',
+              context: quickGlossaryContext?.value || ''
+            })
+          });
+          const data = await response.json();
+          if (!response.ok || !data.ok) throw new Error(data.message || 'Falha ao salvar termo.');
+
+          setStatus(`"${term}" foi adicionado ao glossário. Total: ${data.count} termo(s).`);
+          if (quickGlossaryTerm) quickGlossaryTerm.value = '';
+          if (quickGlossaryVariants) quickGlossaryVariants.value = '';
+          if (quickGlossaryContext) quickGlossaryContext.value = '';
+          closeGlossaryPanel();
+        } catch (error) {
+          setStatus(error.message || 'Falha ao salvar termo no glossário.');
+        } finally {
+          saveGlossaryButton.disabled = false;
+          saveGlossaryButton.textContent = originalText;
+        }
+      }
+
+      openGlossaryButton?.addEventListener('click', openGlossaryPanel);
+      cancelGlossaryButton?.addEventListener('click', closeGlossaryPanel);
+      saveGlossaryButton?.addEventListener('click', saveQuickGlossaryTerm);
+
+      list.addEventListener('click', (event) => {
+        const restoreButton = event.target.closest('[data-restore-original]');
+        const playButton = event.target.closest('[data-play-transcription-sample]');
+        const block = event.target.closest('[data-transcription-review-block]');
+        if (!block) return;
+
+        if (restoreButton) {
+          const original = block.querySelector('[data-original-text]');
+          const textarea = block.querySelector('textarea[name="revision_text[]"]');
+          if (original && textarea) {
+            textarea.value = original.textContent.trim();
+            textarea.focus();
+          }
+          markBlockReviewed(block);
+          return;
+        }
+
+        if (playButton) {
+          toggleBlockAudio(block, playButton);
+        }
+
+        const searchIndex = searchResults.indexOf(block);
+        if (searchIndex >= 0) {
+          activateSearchResult(searchIndex, { scroll: false });
+        }
+      });
+
+      list.addEventListener('input', (event) => {
+        if (!event.target.matches('textarea[name="revision_text[]"]')) return;
+        const block = event.target.closest('[data-transcription-review-block]');
+        if (!block || block.dataset.different !== 'true') return;
+        markBlockReviewed(block, 'Trecho marcado como revisado automaticamente.');
+      });
+
+      function markBlockReviewed(block, message) {
+        if (block.dataset.different !== 'true') return;
+        const wasReviewed = block.dataset.reviewed === 'true';
+        block.dataset.reviewed = 'true';
+        block.classList.add('is-reviewed');
+        diffCursor = -1;
+        updateDiffStatus(wasReviewed ? undefined : message);
+      }
+
+      function resetAudioButtons() {
+        list.querySelectorAll('[data-play-transcription-sample]').forEach((button) => {
+          button.textContent = '▶ Reproduzir trecho';
+        });
+      }
+
+      function toggleBlockAudio(block, button) {
+        const audio = block.querySelector('audio');
+        if (!audio) return;
+        if (activeAudio && activeAudio !== audio) {
+          activeAudio.pause();
+          activeAudio.currentTime = 0;
+        }
+        resetAudioButtons();
+        if (audio.paused) {
+          activeAudio = audio;
+          audio.play()
+            .then(() => {
+              button.textContent = 'Pausar trecho';
+              setStatus('Reproduzindo trecho selecionado.');
+            })
+            .catch(() => setStatus('Não foi possível reproduzir este trecho.'));
+        } else {
+          audio.pause();
+          button.textContent = '▶ Reproduzir trecho';
+          setStatus('');
+        }
+        audio.onended = () => {
+          button.textContent = '▶ Reproduzir trecho';
+          setStatus('');
+        };
+      }
+
+      document.addEventListener('keydown', (event) => {
+        if (modal.hidden) return;
+        if (event.key === 'Escape') {
+          closeModal();
+          return;
+        }
+        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+          event.preventDefault();
+          const input = form.querySelector('input[name="scroll_y"]');
+          if (input) input.value = String(window.scrollY || window.pageYOffset || 0);
+          form.requestSubmit();
+        }
+      });
+    })();
+  </script>
 
   <script>
     // Mantém a rolagem e executa o Botão Mágico com AJAX seguro.
@@ -1144,8 +3082,27 @@
       });
 
       const magicButton = document.getElementById('magic-button');
-      const magicOverlay = document.getElementById('magic-overlay');
-      const magicOverlayGif = document.getElementById('magic-overlay-gif');
+      const automationButton = document.getElementById('automation-button');
+      const automationModal = document.getElementById('automation-modal');
+      const automationStartButton = document.getElementById('automation-start-button');
+      let activeMagicGif = '';
+      const completedSteps = {
+        step2: {% if step_2_done %}true{% else %}false{% endif %},
+        step3: {% if step_3_done %}true{% else %}false{% endif %},
+        step4: {% if step_4_done %}true{% else %}false{% endif %},
+        step5: {% if ai_suggestions and ai_suggestions.get("cuts") %}true{% else %}false{% endif %},
+        step6: {% if selected_ai_cuts %}true{% else %}false{% endif %},
+        step8: {% if cuts %}true{% else %}false{% endif %},
+        final: {% if processed_files %}true{% else %}false{% endif %}
+      };
+      const automationTargets = {
+        step_2: 2,
+        step_3: 3,
+        step_5: 5,
+        step_6: 6,
+        step_8: 8,
+        final: 10
+      };
       const MAGIC_GIFS = [
         'https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExZ2dqZTBpdjIybml4ajZ4c2N5aWI4MGl5bG4yeXpxc2piM21uNzR2eSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/vy6rpmMJQDZczEHanJ/giphy.gif',
         'https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExN2czNDJxZHh2N3B2aHU3eWNvNDM1dWxpNzl6OGxhbnNvOWNpajJybyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/5mwdfypLZ8Vu0nZ0rq/giphy.gif',
@@ -1156,39 +3113,93 @@
       ];
 
       function showMagicOverlay() {
-        if (!magicOverlay || !magicOverlayGif) return;
-        magicOverlayGif.src = MAGIC_GIFS[Math.floor(Math.random() * MAGIC_GIFS.length)];
-        magicOverlay.classList.add('is-visible');
-        magicOverlay.setAttribute('aria-hidden', 'false');
+        activeMagicGif = MAGIC_GIFS[Math.floor(Math.random() * MAGIC_GIFS.length)];
+        if (window.EVRProgress) {
+          window.EVRProgress.setMagic(activeMagicGif);
+        }
       }
 
       function hideMagicOverlay() {
-        if (!magicOverlay) return;
-        magicOverlay.classList.remove('is-visible');
-        magicOverlay.setAttribute('aria-hidden', 'true');
+        activeMagicGif = '';
+        if (window.EVRProgress) {
+          window.EVRProgress.clearMagic();
+        }
       }
 
-      function setProgressState(jobType, state, progress, message, detail) {
+      function openAutomationModal() {
+        if (!automationModal) return;
+        automationModal.hidden = false;
+        automationModal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('modal-open');
+        const checked = automationModal.querySelector('input[name="automation_target"]:checked');
+        if (checked) checked.focus();
+      }
+
+      function closeAutomationModal() {
+        if (!automationModal) return;
+        automationModal.hidden = true;
+        automationModal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+      }
+
+      function selectedAutomationTarget() {
+        const selected = automationModal ? automationModal.querySelector('input[name="automation_target"]:checked') : null;
+        return selected ? selected.value : 'step_6';
+      }
+
+      function reachesTarget(target, stepNumber) {
+        return (automationTargets[target] || 0) >= stepNumber;
+      }
+
+      function finishAutomation(jobType, message, detail) {
+        if (window.EVRProgress) window.EVRProgress.clearJob();
+        setProgressState(jobType, 'success', 100, message, detail);
+        setTimeout(() => window.location.reload(), 900);
+      }
+
+      function setAutomationDisabled(disabled) {
+        if (magicButton) magicButton.disabled = disabled;
+        if (automationButton) automationButton.disabled = disabled;
+        if (automationStartButton) automationStartButton.disabled = disabled;
+      }
+
+      function setProgressState(jobType, state, progress, message, detail, options = {}) {
+        const keepMagic = Boolean(options.magic) || Boolean(activeMagicGif);
+        if (window.EVRProgress) {
+          window.EVRProgress.setState(
+            jobType,
+            { state, progress, message, detail },
+            { magic: keepMagic, gif: activeMagicGif }
+          );
+          return;
+        }
+
         const panel = document.getElementById('progress-panel');
         const title = document.getElementById('progress-title');
         const percent = document.getElementById('progress-percent');
+        const magicPercent = document.getElementById('progress-magic-percent');
+        const magicGif = document.getElementById('progress-magic-gif');
         const fill = document.getElementById('progress-fill');
         const progressMessage = document.getElementById('progress-message');
         const progressDetail = document.getElementById('progress-detail');
         const titles = {
           generate_transcription: 'Gerar transcrição',
-          identify_speakers: 'Identificar speakers',
+          identify_speakers: 'Mapear participantes',
           suggest_cuts: 'Sugerir cortes com IA',
           process_cuts: 'Processar cortes'
         };
 
         if (!panel) return;
         panel.hidden = false;
+        document.body.classList.add('progress-lock');
+        panel.classList.toggle('is-magic', keepMagic);
+        if (keepMagic && magicGif && activeMagicGif) magicGif.src = activeMagicGif;
         panel.classList.remove('is-running', 'is-success', 'is-error');
         panel.classList.add(state === 'success' ? 'is-success' : state === 'error' ? 'is-error' : 'is-running');
 
         if (title) title.textContent = titles[jobType] || 'Processando';
         if (percent) percent.textContent = `${progress}%`;
+        if (magicPercent) magicPercent.textContent = `${progress}%`;
         if (fill) fill.style.width = `${Math.max(0, Math.min(100, progress))}%`;
         if (progressMessage) progressMessage.textContent = message || 'Processando...';
         if (progressDetail) progressDetail.textContent = detail || '';
@@ -1218,6 +3229,7 @@
       }
 
       async function pollJob(projectId, jobType) {
+        if (window.EVRProgress) window.EVRProgress.trackJob(projectId, jobType);
         while (true) {
           const response = await fetch(`/job_status/${projectId}/${jobType}`, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
@@ -1238,54 +3250,138 @@
         }
       }
 
-      async function runMagicSequence() {
-        if (!magicButton) return;
-
+      async function runAutomationSequence(target, options = {}) {
         const projectId = {{ project_id|tojson }};
         const initialMarginInput = document.getElementById('initial_margin_seconds');
         const finalMarginInput = document.getElementById('final_margin_seconds');
         const initialMargin = initialMarginInput ? (initialMarginInput.value || '0') : '0';
         const finalMargin = finalMarginInput ? (finalMarginInput.value || '1') : '1';
+        const isMagic = target === 'final' && options.source === 'magic';
 
         sessionStorage.setItem('cuts_scroll_y', String(window.scrollY || window.pageYOffset || 0));
-        showMagicOverlay();
-        setProgressState('generate_transcription', 'running', 1, 'Botão mágico iniciado...', 'Executando a sequência completa automaticamente.');
-        magicButton.disabled = true;
+        closeAutomationModal();
+        if (isMagic) {
+          showMagicOverlay();
+        } else {
+          hideMagicOverlay();
+        }
+        setProgressState(
+          'generate_transcription',
+          'running',
+          1,
+          isMagic ? 'Botão mágico iniciado...' : 'Automação iniciada...',
+          'Executando as etapas escolhidas em sequência.',
+          { magic: isMagic }
+        );
+        setAutomationDisabled(true);
 
         try {
-          await postForm(`/generate_transcription/${projectId}`);
-          await pollJob(projectId, 'generate_transcription');
+          if (reachesTarget(target, 2) && !completedSteps.step2) {
+            await postForm(`/generate_transcription/${projectId}`);
+            await pollJob(projectId, 'generate_transcription');
+            completedSteps.step2 = true;
+          }
 
-          setProgressState('suggest_cuts', 'running', 5, 'Solicitando sugestões da IA...', 'Selecionando automaticamente todos os cortes sugeridos.');
-          await postForm(`/suggest_cuts/${projectId}`);
-          await pollJob(projectId, 'suggest_cuts');
+          if (target === 'step_2') {
+            finishAutomation('generate_transcription', 'Automação concluída', 'Transcrição gerada. Assuma a partir do mapeamento de participantes.');
+            return;
+          }
 
-          setProgressState('suggest_cuts', 'running', 88, 'Aplicando margens e selecionando tudo...', 'Preparando conteúdo e ganchos automaticamente.');
-          await postForm(`/use_ai_cuts/${projectId}`, {
-            select_all: '1',
-            initial_margin_seconds: initialMargin,
-            final_margin_seconds: finalMargin,
-            replace_selected: '1'
-          });
+          if (reachesTarget(target, 3) && !completedSteps.step3) {
+            setProgressState('identify_speakers', 'running', 4, 'Mapeando participantes...', 'Preparando a diarização em sequência.');
+            await postForm(`/identify_speakers/${projectId}`);
+            await pollJob(projectId, 'identify_speakers');
+            completedSteps.step3 = true;
+          }
 
-          setProgressState('process_cuts', 'running', 8, 'Convertendo sugestões em cortes...', 'Criando a nova remessa automaticamente.');
-          await postForm(`/append_selected_ai_cuts/${projectId}`);
+          if (target === 'step_3') {
+            finishAutomation('identify_speakers', 'Automação concluída', 'Participantes mapeados. Assuma a partir da identificação.');
+            return;
+          }
 
-          await postForm(`/process_cuts/${projectId}`);
-          await pollJob(projectId, 'process_cuts');
+          if (reachesTarget(target, 5) && !completedSteps.step4) {
+            setProgressState('identify_speakers', 'running', 96, 'Confirmando participantes...', 'Aceitando os nomes atuais para seguir o fluxo.');
+            await postForm(`/mark_speakers_reviewed/${projectId}`);
+            completedSteps.step4 = true;
+          }
 
-          setProgressState('process_cuts', 'success', 100, 'Mágica concluída', 'Todos os processos foram executados automaticamente.');
-          setTimeout(() => window.location.reload(), 900);
+          if (reachesTarget(target, 5) && !completedSteps.step5) {
+            setProgressState('suggest_cuts', 'running', 5, 'Solicitando sugestões da IA...', 'A IA vai analisar o material e montar as opções de cortes.');
+            await postForm(`/suggest_cuts/${projectId}`);
+            await pollJob(projectId, 'suggest_cuts');
+            completedSteps.step5 = true;
+          }
+
+          if (target === 'step_5') {
+            finishAutomation('suggest_cuts', 'Automação concluída', 'Sugestões geradas. Assuma a partir da lista da IA.');
+            return;
+          }
+
+          if (reachesTarget(target, 6) && !completedSteps.step6) {
+            setProgressState('suggest_cuts', 'running', 88, 'Aplicando margens e selecionando tudo...', 'Preparando conteúdo e ganchos automaticamente.');
+            await postForm(`/use_ai_cuts/${projectId}`, {
+              select_all: '1',
+              initial_margin_seconds: initialMargin,
+              final_margin_seconds: finalMargin,
+              replace_selected: '1'
+            });
+            completedSteps.step6 = true;
+          }
+
+          if (target === 'step_6') {
+            finishAutomation('suggest_cuts', 'Automação concluída', 'Sugestões adicionadas. Assuma a partir dos cortes manuais.');
+            return;
+          }
+
+          if (reachesTarget(target, 8) && !completedSteps.step8) {
+            setProgressState('process_cuts', 'running', 8, 'Convertendo sugestões em cortes...', 'Criando a nova remessa automaticamente.');
+            await postForm(`/append_selected_ai_cuts/${projectId}`);
+            completedSteps.step8 = true;
+          }
+
+          if (target === 'step_8') {
+            finishAutomation('process_cuts', 'Automação concluída', 'Cortes definidos. Assuma a partir do processamento.');
+            return;
+          }
+
+          if (target === 'final' && !completedSteps.final) {
+            await postForm(`/process_cuts/${projectId}`);
+            await pollJob(projectId, 'process_cuts');
+            completedSteps.final = true;
+          }
+
+          finishAutomation('process_cuts', isMagic ? 'Mágica concluída' : 'Automação concluída', 'Todos os processos escolhidos foram executados automaticamente.');
         } catch (error) {
-          setProgressState('process_cuts', 'error', 100, 'A mágica encontrou um problema', String(error.message || error));
+          setProgressState('process_cuts', 'error', 100, isMagic ? 'A mágica encontrou um problema' : 'A automação encontrou um problema', String(error.message || error));
           hideMagicOverlay();
-          magicButton.disabled = false;
+          if (window.EVRProgress) window.EVRProgress.clearJob();
+          setAutomationDisabled(false);
         }
+      }
+
+      if (automationButton) {
+        automationButton.addEventListener('click', openAutomationModal);
+      }
+
+      document.querySelectorAll('[data-automation-close]').forEach((button) => {
+        button.addEventListener('click', closeAutomationModal);
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && automationModal && !automationModal.hidden) {
+          closeAutomationModal();
+        }
+      });
+
+      if (automationStartButton) {
+        automationStartButton.addEventListener('click', () => {
+          runAutomationSequence(selectedAutomationTarget(), { source: 'automation' });
+        });
       }
 
       if (magicButton) {
         magicButton.addEventListener('click', () => {
-          runMagicSequence();
+          runAutomationSequence('final', { source: 'magic' });
         });
       }
     })();
@@ -1293,6 +3389,21 @@
 
   {% endif %}
 
+  </main>
+
+  <footer class="app-footer">
+    <div class="footer-inner">
+      <strong>Criado por Robson Yuri</strong>
+      <div class="footer-contact">
+        <span>Instagram: <a href="https://www.instagram.com/robson.yd" target="_blank" rel="noopener noreferrer">robson.yd</a></span>
+        <span>E-mail: robson.yd@gmail.com</span>
+        <span>WhatsApp: 47 98855-3204</span>
+        <span>São Paulo - SP</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
 </body>
 </html>

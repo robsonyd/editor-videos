@@ -16,6 +16,7 @@ ENV/
 # Ambiente / segredos
 .env
 *.env
+*.env.save
 
 # Arquivos locais do app
 Bruto/*

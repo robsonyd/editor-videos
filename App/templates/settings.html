@@ -3,245 +3,503 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Configurações — Editor de Vídeos</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 1000px;
-      margin: 40px auto;
-      padding: 0 20px;
-      background: #f7f7f7;
-      color: #222;
-    }
-
-    .box {
-      background: #fff;
-      padding: 24px;
-      border-radius: 12px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-      margin-bottom: 24px;
-    }
-
-    h1, h2, h3 { margin-top: 0; }
-    h1 { font-size: 32px; margin-bottom: 8px; }
-    h2 { font-size: 22px; margin-bottom: 16px; }
-
-    a {
-      color: #1f6feb;
-      text-decoration: none;
-    }
-
-    label {
-      font-weight: bold;
-      display: block;
-      margin-top: 14px;
-      margin-bottom: 6px;
-    }
-
-    input[type="password"],
-    select {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      box-sizing: border-box;
-      font-size: 14px;
-      background: #fff;
-    }
-
-    button {
-      background: #1f6feb;
-      color: white;
-      border: none;
-      padding: 12px 18px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-top: 14px;
-    }
-
-    button:hover { background: #1558b0; }
-
-    .secondary-button { background: #444; }
-    .secondary-button:hover { background: #222; }
-
-    .hint {
-      color: #666;
-      font-size: 14px;
-      line-height: 1.5;
-      margin-top: 8px;
-    }
-
-    .small-hint {
-      color: #777;
-      font-size: 12px;
-      margin-top: 6px;
-    }
-
-    .status-ok {
-      color: #137333;
-      font-weight: bold;
-      margin-bottom: 8px;
-    }
-
-    .status-error {
-      color: #b91c1c;
-      font-weight: bold;
-      margin-bottom: 8px;
-    }
-
-    .settings-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 18px;
-    }
-
-    .settings-card {
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      padding: 16px;
-      background: #fafafa;
-    }
-
-    .settings-status {
-      display: inline-flex;
-      align-items: center;
-      padding: 5px 9px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 700;
-      margin-bottom: 10px;
-    }
-
-    .settings-status.ok {
-      color: #166534;
-      background: #dcfce7;
-      border: 1px solid #86efac;
-    }
-
-    .settings-status.warn {
-      color: #92400e;
-      background: #fef3c7;
-      border: 1px solid #fcd34d;
-    }
-
-    .inline-form {
-      display: inline-block;
-      margin-right: 8px;
-    }
-
-    .danger-check {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 10px;
-      color: #7f1d1d;
-      font-size: 13px;
-      font-weight: normal;
-    }
-
-    .danger-check input { margin: 0; }
-
-    @media (max-width: 800px) {
-      .settings-grid { grid-template-columns: 1fr; }
-    }
-  </style>
+  <title>Configurações — EVR Deluxe</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
-<body>
-  <div class="box">
-    <h1>Configurações</h1>
-    <p class="hint">Área isolada para configurar APIs, tokens e integrações da ferramenta.</p>
-    <p><a href="{{ url_for('home') }}">← Voltar para a Home</a></p>
-  </div>
+<body class="app-shell settings-page">
+  <header class="app-topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{{ url_for('home') }}">
+        <img class="brand-logo" src="{{ url_for('brand_logo') }}" alt="EVR Deluxe">
+        <span class="brand-mark">
+          <span class="brand-name">EVR Deluxe</span>
+          <span class="brand-kicker">Editor de vídeo local, organizado e inteligente</span>
+        </span>
+      </a>
 
-  <div class="box">
-    <h2>APIs e Integrações</h2>
-    <p class="hint">Cadastre aqui as chaves usadas pelo app. Deixe o campo da chave em branco para manter a chave atual.</p>
+      <nav class="nav-actions" aria-label="Navegação principal">
+        <a class="nav-link" href="{{ url_for('home') }}">Voltar para Home</a>
+      </nav>
+    </div>
+  </header>
 
-    {% if request.args.get('saved') %}
-      <p class="status-ok">Configurações salvas.</p>
-    {% endif %}
-
-    {% if request.args.get('api_test') %}
-      <p class="status-ok">{{ request.args.get('api_test') }}</p>
-    {% endif %}
-
-    {% if request.args.get('api_error') %}
-      <p class="status-error">{{ request.args.get('api_error') }}</p>
-    {% endif %}
-
-    <form action="{{ url_for('save_api_settings') }}" method="POST">
-      <div class="settings-grid">
-        <div class="settings-card">
-          <h3>OpenAI</h3>
-
-          {% if api_settings.openai_configured %}
-            <span class="settings-status ok">Configurada</span>
-            <p class="small-hint">Chave atual: {{ api_settings.openai_api_key_masked }}</p>
-          {% else %}
-            <span class="settings-status warn">Não configurada</span>
-          {% endif %}
-
-          <label>OpenAI API Key</label>
-          <input type="password" name="openai_api_key" placeholder="Cole uma nova chave ou deixe em branco para manter">
-
-          <label>Modelo OpenAI</label>
-          <select name="openai_model">
-            {% for model in openai_model_options %}
-              <option value="{{ model.value }}" {% if api_settings.openai_model == model.value %}selected{% endif %}>{{ model.label }}</option>
-            {% endfor %}
-          </select>
-          <p class="small-hint">O usuário escolhe o modelo em lista, sem digitar nome técnico.</p>
-
-          {% if api_settings.openai_configured %}
-            <label class="danger-check">
-              <input type="checkbox" name="clear_openai_api_key" value="1">
-              Remover chave OpenAI salva
-            </label>
-          {% endif %}
-        </div>
-
-        <div class="settings-card">
-          <h3>Hugging Face / Pyannote</h3>
-
-          {% if api_settings.huggingface_configured %}
-            <span class="settings-status ok">Configurada</span>
-            <p class="small-hint">Token atual: {{ api_settings.huggingface_token_masked }}</p>
-          {% else %}
-            <span class="settings-status warn">Não configurada</span>
-          {% endif %}
-
-          <label>Hugging Face Token</label>
-          <input type="password" name="huggingface_token" placeholder="Cole um novo token ou deixe em branco para manter">
-
-          <label>Modelo Pyannote</label>
-          <select name="pyannote_model">
-            {% for model in pyannote_model_options %}
-              <option value="{{ model.value }}" {% if api_settings.pyannote_model == model.value %}selected{% endif %}>{{ model.label }}</option>
-            {% endfor %}
-          </select>
-          <p class="small-hint">A lista pode receber novos modelos compatíveis nas próximas integrações.</p>
-
-          {% if api_settings.huggingface_configured %}
-            <label class="danger-check">
-              <input type="checkbox" name="clear_huggingface_token" value="1">
-              Remover token Hugging Face salvo
-            </label>
-          {% endif %}
-        </div>
+  <main class="app-main">
+    <section class="settings-console">
+      <div>
+        <span class="eyebrow">Configurações</span>
+        <h1>Desempenho {{ performance_settings.label }}</h1>
+        <p class="page-subtitle">Ajuste o ritmo de processamento local e mantenha credenciais e modelos em uma área única.</p>
       </div>
 
-      <button type="submit">Salvar configurações</button>
-    </form>
+      <div class="settings-status-strip" aria-label="Status das integrações">
+        <span class="chip {% if api_settings.openai_ok %}is-ok{% else %}is-warn{% endif %}">OpenAI: {% if api_settings.openai_ok %}OK{% else %}Pendente{% endif %}</span>
+        <span class="chip {% if api_settings.huggingface_ok %}is-ok{% else %}is-warn{% endif %}">Hugging Face: {% if api_settings.huggingface_ok %}OK{% else %}Pendente{% endif %}</span>
+      </div>
+    </section>
 
-    <form class="inline-form" action="{{ url_for('test_api_settings', provider='openai') }}" method="POST">
-      <button class="secondary-button" type="submit">Testar OpenAI</button>
-    </form>
+    {% if show_settings_onboarding %}
+      <div class="onboarding-tour" data-onboarding-tour data-tour-scope="settings" data-tour-key="settings_tour_seen" data-dismiss-url="{{ url_for('dismiss_onboarding') }}" hidden aria-hidden="true">
+        <div class="onboarding-tour-scrim" data-tour-dismiss></div>
+        <section class="onboarding-popover" data-tour-card role="dialog" aria-live="polite" aria-label="Dica de configuração">
+          <button type="button" class="onboarding-popover-close" data-tour-dismiss aria-label="Fechar dicas">×</button>
+          <span class="onboarding-popover-kicker" data-tour-kicker>Configurações</span>
+          <h3 data-tour-title></h3>
+          <p data-tour-body></p>
+          <div class="onboarding-popover-actions">
+            <button type="button" class="secondary-button" data-tour-dismiss>Fechar dicas</button>
+            <button type="button" data-tour-next>Próxima</button>
+          </div>
+        </section>
+      </div>
+    {% endif %}
 
-    <form class="inline-form" action="{{ url_for('test_api_settings', provider='huggingface') }}" method="POST">
-      <button class="secondary-button" type="submit">Testar Hugging Face</button>
-    </form>
+    <section class="box settings-panel" data-tour-target="settings-performance">
+      <aside class="settings-aside">
+        <span class="section-kicker">Desempenho</span>
+        <h2>Modo de processamento</h2>
+        <p class="hint">Escolha o ritmo dos processamentos locais. Para deixar rodando à noite, mantenha em Econômico.</p>
+      </aside>
 
-    <p class="small-hint">As credenciais ficam salvas localmente neste computador. Não compartilhe nem faça commit do arquivo de configuração gerado.</p>
-  </div>
+      <div class="settings-main">
+        <form class="settings-form" action="{{ url_for('save_performance_settings') }}" method="POST">
+          <div class="settings-card performance-card">
+            <div class="card-header">
+              <div>
+                <h3>Modo atual</h3>
+                <p class="hint">Controla o uso de threads e a prioridade dos processos pesados no seu Mac.</p>
+              </div>
+            </div>
+
+            <div class="performance-options" role="radiogroup" aria-label="Modo de desempenho">
+              {% for option in performance_settings.options %}
+                {% if option.value == "default" %}
+                  <div class="performance-default-option performance-option {% if performance_settings.mode == option.value %}is-selected{% endif %}">
+                    <label class="performance-choice">
+                      <input type="radio" name="performance_mode" value="{{ option.value }}" {% if performance_settings.mode == option.value %}checked{% endif %}>
+                      <span>
+                        <strong>{{ option.label }}</strong>
+                        <small>{{ option.description }}</small>
+                      </span>
+                    </label>
+                    <button type="button" class="secondary-button performance-details-button" data-performance-details="{{ option.value }}">Ver detalhes</button>
+                  </div>
+                {% endif %}
+              {% endfor %}
+
+              <div class="performance-managed-options">
+                {% for option in performance_settings.options %}
+                  {% if option.value != "default" %}
+                    <div class="performance-option {% if performance_settings.mode == option.value %}is-selected{% endif %}">
+                      <label class="performance-choice">
+                        <input type="radio" name="performance_mode" value="{{ option.value }}" {% if performance_settings.mode == option.value %}checked{% endif %}>
+                        <span>
+                          <strong>{{ option.label }}</strong>
+                          <small>{{ option.description }}</small>
+                        </span>
+                      </label>
+                      <button type="button" class="secondary-button performance-details-button" data-performance-details="{{ option.value }}">Ver detalhes</button>
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+
+          <div class="actions-row" style="margin-top: 18px;">
+            <button type="submit">Salvar modo de desempenho</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="box settings-panel" data-tour-target="settings-glossary">
+      <aside class="settings-aside">
+        <span class="section-kicker">Glossário</span>
+        <h2>Correções automáticas</h2>
+        <p class="hint">Termos usados pela revisão automática da transcrição logo após o Whisper.</p>
+      </aside>
+
+      <div class="settings-main">
+        <form class="settings-form" action="{{ url_for('save_glossary_settings') }}" method="POST">
+          <div class="settings-card glossary-card">
+            <div class="card-header">
+              <div>
+                <h3>Termos conhecidos</h3>
+                <p class="hint">A IA usa este glossário sem pedir intervenção durante a geração da transcrição revisada.</p>
+              </div>
+              <span class="settings-status ok">{{ glossary_settings.count }} termo(s)</span>
+            </div>
+
+            <div class="glossary-table-head" aria-hidden="true">
+              <span>Termo correto</span>
+              <span>Variações comuns erradas</span>
+              <span>Contexto opcional</span>
+              <span></span>
+            </div>
+
+            <div class="glossary-list" id="glossary-list">
+              {% for item in glossary_settings.entries %}
+                <div class="glossary-row">
+                  <input type="text" name="glossary_term[]" value="{{ item.term }}" placeholder="Ex: Serpol" aria-label="Termo correto">
+                  <input type="text" name="glossary_variants[]" value="{{ item.variants }}" placeholder="Ex: Serpó, Serpão, Serpolh" aria-label="Variações comuns erradas">
+                  <input type="text" name="glossary_context[]" value="{{ item.context }}" placeholder="Ex: Nome da empresa mencionada no podcast" aria-label="Contexto opcional">
+                  <button type="button" class="delete-button glossary-remove" data-glossary-remove aria-label="Remover termo">×</button>
+                </div>
+              {% endfor %}
+
+              <div class="glossary-row">
+                <input type="text" name="glossary_term[]" placeholder="Ex: Serpol" aria-label="Termo correto">
+                <input type="text" name="glossary_variants[]" placeholder="Ex: Serpó, Serpão, Serpolh" aria-label="Variações comuns erradas">
+                <input type="text" name="glossary_context[]" placeholder="Ex: Nome da empresa mencionada no podcast" aria-label="Contexto opcional">
+                <button type="button" class="delete-button glossary-remove" data-glossary-remove aria-label="Remover termo">×</button>
+              </div>
+            </div>
+
+            <div class="actions-row glossary-actions">
+              <button type="button" class="secondary-button" id="add-glossary-row">Adicionar termo</button>
+              <button type="submit">Salvar glossário</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="box settings-panel" data-tour-target="settings-apis">
+      <aside class="settings-aside">
+        <span class="section-kicker">APIs</span>
+        <h2>Chaves e modelos</h2>
+        <p class="hint">Deixe a chave em branco para manter a atual. As credenciais ficam salvas localmente neste computador.</p>
+
+        <div class="settings-feedback-slot">
+          {% if request.args.get('saved') %}
+            <p class="status-ok">Configurações salvas.</p>
+          {% endif %}
+
+          {% if request.args.get('api_test') %}
+            <p class="status-ok">{{ request.args.get('api_test') }}</p>
+          {% endif %}
+
+          {% if request.args.get('api_error') %}
+            <p class="status-error">{{ request.args.get('api_error') }}</p>
+          {% endif %}
+        </div>
+      </aside>
+
+      <div class="settings-main">
+        <form class="settings-form" action="{{ url_for('save_api_settings') }}" method="POST">
+          <div class="settings-grid">
+            <div class="settings-card">
+              <div class="card-header">
+                <div>
+                  <h3>OpenAI</h3>
+                  <p class="hint">Usada para gerar sugestões de cortes e ganchos.</p>
+                </div>
+
+                <div class="api-card-actions">
+                  {% if api_settings.openai_configured %}
+                    <span class="settings-status ok">Configurada</span>
+                  {% else %}
+                    <span class="settings-status warn">Não configurada</span>
+                  {% endif %}
+                  <button type="button" class="secondary-button api-help-button" data-api-help-open="openai">Ajuda</button>
+                </div>
+              </div>
+
+              {% if api_settings.openai_configured %}
+                <p class="small-hint">Chave atual: {{ api_settings.openai_api_key_masked }}</p>
+              {% endif %}
+
+              <label>OpenAI API Key</label>
+              <input type="password" name="openai_api_key" placeholder="Cole uma nova chave ou deixe em branco para manter">
+
+              <label>Modelo OpenAI</label>
+              <select name="openai_model">
+                {% for model in openai_model_options %}
+                  <option value="{{ model.value }}" {% if api_settings.openai_model == model.value %}selected{% endif %}>{{ model.label }}</option>
+                {% endfor %}
+              </select>
+              <p class="small-hint">O usuário escolhe o modelo em lista, sem digitar nome técnico.</p>
+
+              {% if api_settings.openai_configured %}
+                <label class="danger-check">
+                  <input type="checkbox" name="clear_openai_api_key" value="1">
+                  Remover chave OpenAI salva
+                </label>
+              {% endif %}
+            </div>
+
+            <div class="settings-card">
+              <div class="card-header">
+                <div>
+                  <h3>Hugging Face / Pyannote</h3>
+                  <p class="hint">Usada para mapear participantes nos vídeos.</p>
+                </div>
+
+                <div class="api-card-actions">
+                  {% if api_settings.huggingface_configured %}
+                    <span class="settings-status ok">Configurada</span>
+                  {% else %}
+                    <span class="settings-status warn">Não configurada</span>
+                  {% endif %}
+                  <button type="button" class="secondary-button api-help-button" data-api-help-open="huggingface">Ajuda</button>
+                </div>
+              </div>
+
+              {% if api_settings.huggingface_configured %}
+                <p class="small-hint">Token atual: {{ api_settings.huggingface_token_masked }}</p>
+              {% endif %}
+
+              <label>Hugging Face Token</label>
+              <input type="password" name="huggingface_token" placeholder="Cole um novo token ou deixe em branco para manter">
+
+              <label>Modelo Pyannote</label>
+              <select name="pyannote_model">
+                {% for model in pyannote_model_options %}
+                  <option value="{{ model.value }}" {% if api_settings.pyannote_model == model.value %}selected{% endif %}>{{ model.label }}</option>
+                {% endfor %}
+              </select>
+              <p class="small-hint">A lista pode receber novos modelos compatíveis nas próximas integrações.</p>
+
+              {% if api_settings.huggingface_configured %}
+                <label class="danger-check">
+                  <input type="checkbox" name="clear_huggingface_token" value="1">
+                  Remover token Hugging Face salvo
+                </label>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="actions-row" style="margin-top: 18px;">
+            <button type="submit">Salvar configurações</button>
+          </div>
+        </form>
+
+        <div class="section-divider"></div>
+
+        <div class="actions-row">
+          <form class="inline-form" action="{{ url_for('test_api_settings', provider='openai') }}" method="POST">
+            <button class="secondary-button" type="submit">Testar OpenAI</button>
+          </form>
+
+          <form class="inline-form" action="{{ url_for('test_api_settings', provider='huggingface') }}" method="POST">
+            <button class="secondary-button" type="submit">Testar Hugging Face</button>
+          </form>
+        </div>
+
+        <p class="small-hint">Não compartilhe nem faça commit do arquivo de configuração gerado.</p>
+      </div>
+    </section>
+
+    <div class="automation-modal performance-details-modal" id="performance-details-modal" hidden aria-hidden="true">
+      <div class="automation-backdrop" data-performance-details-close></div>
+      <section class="automation-dialog" role="dialog" aria-modal="true" aria-labelledby="performance-details-title">
+        <button type="button" class="automation-close" data-performance-details-close aria-label="Fechar">×</button>
+        <div class="automation-head">
+          <span class="section-kicker">Detalhes técnicos</span>
+          <h3 id="performance-details-title">Modo de desempenho</h3>
+          <p class="hint">Informações somente leitura sobre como o EVR Deluxe executa os processos neste modo.</p>
+        </div>
+        <ul class="performance-details-list" id="performance-details-list"></ul>
+      </section>
+    </div>
+
+    <div class="automation-modal api-help-modal" id="api-help-modal" hidden aria-hidden="true">
+      <div class="automation-backdrop" data-api-help-close></div>
+      <section class="automation-dialog api-help-dialog" role="dialog" aria-modal="true" aria-labelledby="api-help-title">
+        <button type="button" class="automation-close" data-api-help-close aria-label="Fechar">×</button>
+        <div class="automation-head">
+          <span class="section-kicker">Ajuda rápida</span>
+          <h3 id="api-help-title">Configurar APIs</h3>
+          <p class="hint" id="api-help-subtitle">Passo a passo resumido para conectar as ferramentas de inteligência artificial.</p>
+        </div>
+
+        <div class="api-help-content" data-api-help-content="openai" hidden>
+          <div class="api-help-summary">
+            <strong>OpenAI</strong>
+            <span>Necessária para revisar transcrições, consultar o glossário e gerar sugestões de cortes e ganchos.</span>
+          </div>
+          <ol class="api-help-steps">
+            <li>Acesse sua conta na plataforma da OpenAI.</li>
+            <li>Abra a área de API Keys e crie uma nova chave secreta.</li>
+            <li>Copie a chave, cole no campo OpenAI API Key e salve.</li>
+            <li>Clique em Testar OpenAI para confirmar se está tudo OK.</li>
+          </ol>
+          <p class="small-hint">A API da OpenAI é paga conforme uso e cobrança da sua própria conta OpenAI.</p>
+          <a class="secondary-button api-help-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Abrir API Keys da OpenAI</a>
+        </div>
+
+        <div class="api-help-content" data-api-help-content="huggingface" hidden>
+          <div class="api-help-summary">
+            <strong>Hugging Face / Pyannote</strong>
+            <span>Necessária para mapear participantes e identificar quem fala em cada trecho do vídeo.</span>
+          </div>
+          <ol class="api-help-steps">
+            <li>Crie ou acesse sua conta na Hugging Face.</li>
+            <li>Abra Settings, depois Access Tokens, e crie um token de acesso.</li>
+            <li>Confirme acesso ao modelo Pyannote usado pelo EVR Deluxe, quando a Hugging Face solicitar.</li>
+            <li>Copie o token, cole no campo Hugging Face Token, salve e clique em Testar Hugging Face.</li>
+          </ol>
+          <p class="small-hint">Alguns modelos da Pyannote exigem aceite de termos na página do modelo antes do token funcionar.</p>
+          <div class="api-help-links">
+            <a class="secondary-button api-help-link" href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer">Abrir tokens da Hugging Face</a>
+            <a class="secondary-button api-help-link" href="https://huggingface.co/pyannote/speaker-diarization-3.1" target="_blank" rel="noopener noreferrer">Abrir modelo Pyannote</a>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script type="application/json" id="performance-details-data">{{ performance_settings.options|tojson }}</script>
+
+    <script>
+      (function () {
+        const list = document.getElementById('glossary-list');
+        const addButton = document.getElementById('add-glossary-row');
+        if (!list || !addButton) return;
+
+        function createRow() {
+          const row = document.createElement('div');
+          row.className = 'glossary-row';
+          row.innerHTML = `
+            <input type="text" name="glossary_term[]" placeholder="Ex: Serpol" aria-label="Termo correto">
+            <input type="text" name="glossary_variants[]" placeholder="Ex: Serpó, Serpão, Serpolh" aria-label="Variações comuns erradas">
+            <input type="text" name="glossary_context[]" placeholder="Ex: Nome da empresa mencionada no podcast" aria-label="Contexto opcional">
+            <button type="button" class="delete-button glossary-remove" data-glossary-remove aria-label="Remover termo">×</button>
+          `;
+          return row;
+        }
+
+        addButton.addEventListener('click', () => {
+          list.appendChild(createRow());
+        });
+
+        list.addEventListener('click', (event) => {
+          const button = event.target.closest('[data-glossary-remove]');
+          if (!button) return;
+          const row = button.closest('.glossary-row');
+          if (row) row.remove();
+          if (!list.querySelector('.glossary-row')) {
+            list.appendChild(createRow());
+          }
+        });
+      })();
+    </script>
+
+    <script>
+      (function () {
+        const modal = document.getElementById('performance-details-modal');
+        const title = document.getElementById('performance-details-title');
+        const list = document.getElementById('performance-details-list');
+        const dataNode = document.getElementById('performance-details-data');
+        if (!modal || !title || !list || !dataNode) return;
+
+        let options = [];
+        try {
+          options = JSON.parse(dataNode.textContent || '[]');
+        } catch (_) {
+          options = [];
+        }
+
+        const byValue = new Map(options.map((option) => [option.value, option]));
+
+        function openDetails(mode) {
+          const option = byValue.get(mode);
+          if (!option) return;
+          title.textContent = option.label;
+          list.innerHTML = '';
+          (option.details || []).forEach((detail) => {
+            const item = document.createElement('li');
+            item.textContent = detail;
+            list.appendChild(item);
+          });
+          modal.hidden = false;
+          modal.setAttribute('aria-hidden', 'false');
+          document.body.classList.add('modal-open');
+        }
+
+        function closeDetails() {
+          modal.hidden = true;
+          modal.setAttribute('aria-hidden', 'true');
+          document.body.classList.remove('modal-open');
+        }
+
+        document.querySelectorAll('[data-performance-details]').forEach((button) => {
+          button.addEventListener('click', () => openDetails(button.dataset.performanceDetails));
+        });
+
+        document.querySelectorAll('[data-performance-details-close]').forEach((button) => {
+          button.addEventListener('click', closeDetails);
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && !modal.hidden) closeDetails();
+        });
+      })();
+    </script>
+
+    <script>
+      (function () {
+        const modal = document.getElementById('api-help-modal');
+        const title = document.getElementById('api-help-title');
+        const subtitle = document.getElementById('api-help-subtitle');
+        if (!modal || !title || !subtitle) return;
+
+        const copy = {
+          openai: {
+            title: 'Ajuda para configurar OpenAI',
+            subtitle: 'Use esta chave para as etapas em que o EVR Deluxe conversa com a IA.'
+          },
+          huggingface: {
+            title: 'Ajuda para configurar Hugging Face',
+            subtitle: 'Use este token para identificação de participantes com Pyannote.'
+          }
+        };
+
+        function openApiHelp(provider) {
+          const current = copy[provider];
+          if (!current) return;
+          title.textContent = current.title;
+          subtitle.textContent = current.subtitle;
+          modal.querySelectorAll('[data-api-help-content]').forEach((content) => {
+            content.hidden = content.dataset.apiHelpContent !== provider;
+          });
+          modal.hidden = false;
+          modal.setAttribute('aria-hidden', 'false');
+          document.body.classList.add('modal-open');
+        }
+
+        function closeApiHelp() {
+          modal.hidden = true;
+          modal.setAttribute('aria-hidden', 'true');
+          document.body.classList.remove('modal-open');
+        }
+
+        document.querySelectorAll('[data-api-help-open]').forEach((button) => {
+          button.addEventListener('click', () => openApiHelp(button.dataset.apiHelpOpen));
+        });
+
+        document.querySelectorAll('[data-api-help-close]').forEach((button) => {
+          button.addEventListener('click', closeApiHelp);
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && !modal.hidden) closeApiHelp();
+        });
+      })();
+    </script>
+  </main>
+
+  <footer class="app-footer">
+    <div class="footer-inner">
+      <strong>Criado por Robson Yuri</strong>
+      <div class="footer-contact">
+        <span>Instagram: <a href="https://www.instagram.com/robson.yd" target="_blank" rel="noopener noreferrer">robson.yd</a></span>
+        <span>E-mail: robson.yd@gmail.com</span>
+        <span>WhatsApp: 47 98855-3204</span>
+        <span>São Paulo - SP</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

@@ -29,6 +29,14 @@ brew install ffmpeg cmake
 
 Também é necessário ter o whisper.cpp compilado localmente e o modelo ggml-base.bin dentro da pasta Modelos.
 
+## Nota sobre modo de desempenho
+
+Os modos de processamento do EVR Deluxe foram construídos inicialmente para MacBook/macOS. Eles controlam prioridade com recursos Unix/macOS, como `nice`, limites de threads para FFmpeg, whisper.cpp e PyTorch, além de variáveis de ambiente usadas por bibliotecas numéricas. Em uma futura versão para Windows, essa camada deve ser adaptada para APIs e estratégias equivalentes do Windows.
+
+## Funcionalidades recentes
+
+- Controle de quantidade de sugestões da IA: a etapa de sugestões permite escolher numericamente quantas opções de corte solicitar e quantas alternativas de gancho gerar por corte.
+
 ## Configuração do ambiente
 
 Entre na pasta do app:

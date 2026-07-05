@@ -3,341 +3,271 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Editor de Vídeos</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 1000px;
-      margin: 40px auto;
-      padding: 0 20px;
-      background: #f7f7f7;
-      color: #222;
-    }
-
-    .box {
-      background: #fff;
-      padding: 24px;
-      border-radius: 12px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-      margin-bottom: 24px;
-    }
-
-    h1, h2 {
-      margin-top: 0;
-    }
-
-    h1 {
-      font-size: 34px;
-      margin-bottom: 8px;
-    }
-
-    h2 {
-      font-size: 22px;
-      margin-bottom: 16px;
-    }
-
-    label {
-      font-weight: bold;
-      display: block;
-      margin-top: 14px;
-      margin-bottom: 6px;
-    }
-
-    input[type="file"],
-    input[type="text"] {
-      width: 100%;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      box-sizing: border-box;
-      font-size: 14px;
-    }
-
-    button {
-      background: #1f6feb;
-      color: white;
-      border: none;
-      padding: 12px 18px;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-top: 14px;
-    }
-
-    button:hover {
-      background: #1558b0;
-    }
-
-    .secondary-button {
-      background: #444;
-    }
-
-    .secondary-button:hover {
-      background: #222;
-    }
-
-    .hint {
-      color: #666;
-      font-size: 14px;
-      line-height: 1.5;
-      margin-top: 8px;
-    }
-
-    .small-hint {
-      color: #777;
-      font-size: 12px;
-      margin-top: 6px;
-    }
-
-    .status-ok {
-      color: #137333;
-      font-weight: bold;
-      margin-bottom: 8px;
-    }
-
-    .destination {
-      background: #f2f4f7;
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 14px;
-      color: #333;
-      word-break: break-all;
-      margin-top: 8px;
-    }
-
-    .radio-group {
-      display: grid;
-      gap: 10px;
-      margin-top: 8px;
-    }
-
-    .radio-card {
-      border: 1px solid #ddd;
-      border-radius: 10px;
-      padding: 12px;
-      background: #fafafa;
-      display: flex;
-      gap: 10px;
-      align-items: flex-start;
-    }
-
-    .radio-card input {
-      margin-top: 3px;
-    }
-
-    .radio-title {
-      font-weight: bold;
-      display: block;
-      margin-bottom: 4px;
-    }
-
-    .radio-description {
-      color: #666;
-      font-size: 13px;
-      line-height: 1.4;
-    }
-
-    ul {
-      padding-left: 20px;
-    }
-
-    li {
-      margin-bottom: 8px;
-    }
-
-    a {
-      color: #1f6feb;
-      text-decoration: none;
-    }
-  
-    .project-list {
-      display: grid;
-      gap: 10px;
-    }
-
-    .project-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      padding: 12px;
-      background: #fafafa;
-      border: 1px solid #e5e5e5;
-      border-radius: 10px;
-    }
-
-    .project-info {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px;
-      line-height: 1.4;
-    }
-
-    .project-number {
-      font-weight: bold;
-      color: #333;
-      min-width: 24px;
-    }
-
-    .project-separator {
-      color: #aaa;
-      margin-right: 4px;
-    }
-
-    .project-title {
-      font-weight: bold;
-    }
-
-    .project-video,
-    .project-status {
-      color: #555;
-      font-size: 14px;
-    }
-
-    .delete-button {
-      background: #f3b5b5;
-      color: #5c1111;
-      padding: 8px 12px;
-      font-size: 12px;
-      margin-top: 0;
-      white-space: nowrap;
-    }
-
-    .delete-button:hover {
-      background: #e89a9a;
-    }
-
-
-    .top-actions {
-      position: fixed;
-      top: 18px;
-      right: 22px;
-      z-index: 10;
-    }
-
-    .settings-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 10px 14px;
-      background: #fff;
-      border: 1px solid #e5e5e5;
-      border-radius: 999px;
-      color: #333;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-      font-size: 14px;
-      font-weight: bold;
-    }
-
-    .settings-link:hover {
-      background: #f2f4f7;
-      color: #111;
-    }
-
-  </style>
+  <title>EVR Deluxe</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
-<body>
+<body class="app-shell home-page">
+  <header class="app-topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{{ url_for('home') }}">
+        <img class="brand-logo" src="{{ url_for('brand_logo') }}" alt="EVR Deluxe">
+        <span class="brand-mark">
+          <span class="brand-name">EVR Deluxe</span>
+          <span class="brand-kicker">Editor de vídeo local, organizado e inteligente</span>
+        </span>
+      </a>
 
-  <div class="top-actions">
-    <a class="settings-link" href="{{ url_for('settings_page') }}">⚙️ Configurações</a>
-  </div>
+      <nav class="nav-actions" aria-label="Navegação principal">
+        <a class="nav-link is-strong" href="{{ url_for('settings_page') }}" data-tour-target="settings">Configurações</a>
+      </nav>
+    </div>
+  </header>
 
-  <div class="box">
-    <h1>Editor de Vídeos</h1>
+  <main class="app-main">
+    {% if not ai_integrations_alert.ok %}
+      <a class="ai-setup-alert is-{{ ai_integrations_alert.severity }}" href="{{ url_for('settings_page') }}" data-tour-target="api-alert">
+        <span class="ai-setup-alert-icon" aria-hidden="true">!</span>
+        <span>
+          <strong>Inteligência artificial pendente</strong>
+          <small>{{ ai_integrations_alert.message }} Pendências: {{ ai_integrations_alert.pending|join(", ") }}.</small>
+        </span>
+        <em>Configurar APIs</em>
+      </a>
+    {% endif %}
 
-    {% if not storage_status.exists %}
-      <h2>Vamos iniciar criando sua pasta de armazenamento</h2>
-      <p class="hint">
-        Os arquivos pesados do sistema serão salvos fora da pasta do código-fonte.
-        Por padrão, criaremos uma pasta na sua Área de Trabalho.
-      </p>
+    <section class="home-console home-console-simple">
+      <div class="console-metrics" aria-label="Resumo do sistema">
+        <div class="metric-card">
+          <span class="metric-value">{{ projects|length }}</span>
+          <span class="metric-label">projetos</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value">2</span>
+          <span class="metric-label">fluxos</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-value">{% if storage_status.exists %}OK{% else %}Pendente{% endif %}</span>
+          <span class="metric-label">pasta</span>
+        </div>
+      </div>
 
-      <form action="{{ url_for('setup_storage') }}" method="POST">
-        <label>Digite o nome da pasta</label>
-        <input type="text" name="storage_folder_name" value="{{ storage_status.folder_name }}" required>
+      <div class="storage-compact" data-tour-target="storage">
+      {% if not storage_status.exists %}
+        <form action="{{ url_for('setup_storage') }}" method="POST">
+          <label>Pasta de trabalho</label>
+          <p class="storage-help">Pasta onde os projetos e arquivos gerados ficam salvos.</p>
+          <div class="storage-inline">
+            <input type="text" name="storage_folder_name" value="{{ storage_status.folder_name }}" required>
+            <button type="submit">Criar</button>
+          </div>
 
-        <div class="destination">
-          <strong>Destino:</strong> {{ storage_status.path }}
+          <div class="destination">
+            <strong>Destino:</strong> {{ storage_status.path }}
+          </div>
+        </form>
+      {% else %}
+        <p class="storage-help">Pasta onde os projetos e arquivos gerados ficam salvos.</p>
+        <div class="storage-ready">
+          <span class="storage-label">Pasta</span>
+          <span class="storage-path">{{ storage_status.path }}</span>
+          <details class="storage-edit">
+            <summary>Alterar</summary>
+            <form action="{{ url_for('setup_storage') }}" method="POST">
+              <input type="text" name="storage_folder_name" value="{{ storage_status.folder_name }}" required>
+              <button type="submit">Salvar</button>
+            </form>
+          </details>
+        </div>
+      {% endif %}
+      </div>
+    </section>
+
+    {% if show_onboarding %}
+      <div class="onboarding-tour" data-onboarding-tour data-tour-scope="home" data-tour-key="home_tour_seen" data-dismiss-url="{{ url_for('dismiss_onboarding') }}" hidden aria-hidden="true">
+        <div class="onboarding-tour-scrim" data-tour-dismiss></div>
+        <section class="onboarding-popover" data-tour-card role="dialog" aria-live="polite" aria-label="Dica de primeiro uso">
+          <button type="button" class="onboarding-popover-close" data-tour-dismiss aria-label="Fechar dicas">×</button>
+          <span class="onboarding-popover-kicker" data-tour-kicker>Primeiro uso</span>
+          <h3 data-tour-title></h3>
+          <p data-tour-body></p>
+          <div class="onboarding-popover-actions">
+            <button type="button" class="secondary-button" data-tour-dismiss>Fechar dicas</button>
+            <button type="button" data-tour-next>Próxima</button>
+          </div>
+        </section>
+      </div>
+    {% endif %}
+
+    <div class="content-grid home-content-grid">
+      <section class="box">
+        <form action="{{ url_for('upload_video') }}" method="POST" enctype="multipart/form-data">
+          <label>Escolha a tarefa a ser realizada</label>
+          <div class="radio-group" data-tour-target="task">
+            <label class="radio-card">
+              <input type="radio" name="task_type" value="ai_cuts" checked>
+              <span>
+                <span class="radio-title">Cortes inteligentes com I.A</span>
+                <span class="radio-description">Transcreve, identifica oportunidades e ajuda a montar conteúdo principal e gancho.</span>
+              </span>
+            </label>
+
+            <label class="radio-card">
+              <input type="radio" name="task_type" value="video_splitter">
+              <span>
+                <span class="radio-title">Video Splitter</span>
+                <span class="radio-description">Divide vídeos por duração, número de partes, presets sociais ou trechos manuais.</span>
+              </span>
+            </label>
+          </div>
+
+          <div data-tour-target="upload">
+            <label>Selecionar arquivo bruto</label>
+            <input type="file" name="video_file" accept=".mp4,.mov,.mkv,.avi" required>
+            <p class="small-hint">Esse arquivo será copiado para a pasta de armazenamento.</p>
+          </div>
+
+          <label>Título do projeto <span class="small-hint">(opcional)</span></label>
+          <input type="text" name="project_title" placeholder="Deixe em branco para usar o nome do arquivo original">
+
+          <button type="submit">Criar projeto</button>
+        </form>
+      </section>
+    </div>
+
+    <section class="box" data-tour-target="projects">
+      <div class="card-header">
+        <div>
+          <h2>Projetos atuais</h2>
+        </div>
+        <span class="chip is-dark">{{ projects|length }} total</span>
+      </div>
+
+      {% if projects %}
+        <div class="project-filters" data-project-filters>
+          <input type="search" data-project-search placeholder="Buscar projeto, arquivo ou etapa">
+          <select data-project-flow-filter aria-label="Filtrar por tarefa">
+            <option value="">Todas as tarefas</option>
+            <option value="ai_cuts">Cortes inteligentes com I.A</option>
+            <option value="video_splitter">Video Splitter</option>
+          </select>
+          <select data-project-status-filter aria-label="Filtrar por status">
+            <option value="">Todos os status</option>
+            <option value="new">Novos</option>
+            <option value="in_progress">Em andamento</option>
+            <option value="done">Concluídos</option>
+            <option value="archived">Arquivados</option>
+          </select>
+          <label class="project-archive-toggle">
+            <input type="checkbox" data-project-show-archived>
+            <span>Mostrar arquivados</span>
+          </label>
         </div>
 
-        <button type="submit">Criar pasta de armazenamento</button>
-      </form>
-    {% else %}
-      <p class="status-ok">Pasta de armazenamento criada e pronta para uso.</p>
+        <div class="project-list">
+          {% for project in projects %}
+            <article class="project-row{% if project.archived %} is-archived{% endif %}"
+                     data-project-row
+                     data-title="{{ (project.project_title or project.id)|lower }}"
+                     data-id="{{ project.id|lower }}"
+                     data-video="{{ project.video_name|lower }}"
+                     data-stage="{{ project.stage_label|lower }}"
+                     data-flow="{{ project.task_type }}"
+                     data-status="{{ project.status_group }}"
+                     data-archived="{% if project.archived %}true{% else %}false{% endif %}">
+              <div class="project-info">
+                <div class="project-title-row">
+                  <span class="project-number">{{ project.project_number or loop.index }}</span>
+                  <a href="{{ url_for('project_detail', project_id=project.id) }}" class="project-title">
+                    {{ project.project_title or project.id }}
+                  </a>
+                  <span class="project-tool">{{ project.task_label }}</span>
+                  {% if project.archived %}
+                    <span class="project-archived-label">Arquivado</span>
+                  {% endif %}
+                </div>
+                <div class="project-meta">
+                  <span class="project-video">{{ project.video_name }}</span>
+                  <span class="project-stage">{{ project.stage_label }}</span>
+                </div>
+              </div>
 
-      <div class="destination">
-        <strong>Destino:</strong> {{ storage_status.path }}
+              <div class="project-actions">
+                <form action="{{ url_for('open_project_folder_from_home', project_id=project.id) }}" method="POST">
+                  <button class="secondary-button" type="submit">Abrir pasta</button>
+                </form>
+
+                <details class="duplicate-choice">
+                  <summary class="secondary-button">Duplicar</summary>
+                  <form class="duplicate-choice-menu" action="{{ url_for('duplicate_project', project_id=project.id) }}" method="POST">
+                    <label>
+                      <span>Novo título</span>
+                      <input type="text" name="duplicate_project_title" value="{{ project.project_title or project.id }} cópia">
+                    </label>
+                    <label><input type="checkbox" name="keep_video" value="yes" checked> Vídeo bruto</label>
+                    <label><input type="checkbox" name="keep_transcription" value="yes" checked> Transcrição</label>
+                    <label><input type="checkbox" name="keep_speakers" value="yes" checked> Participantes</label>
+                    <label><input type="checkbox" name="keep_ai_suggestions" value="yes"> Sugestões da IA</label>
+                    <label><input type="checkbox" name="keep_cuts" value="yes"> Cortes definidos</label>
+                    <label><input type="checkbox" name="keep_processed_files" value="yes"> Arquivos finalizados</label>
+                    <button type="submit">Criar cópia</button>
+                  </form>
+                </details>
+
+                {% if project.archived %}
+                  <form action="{{ url_for('restore_project', project_id=project.id) }}" method="POST">
+                    <button class="secondary-button" type="submit">Restaurar</button>
+                  </form>
+                {% else %}
+                  <form action="{{ url_for('archive_project', project_id=project.id) }}" method="POST">
+                    <button class="secondary-button" type="submit">Arquivar</button>
+                  </form>
+                {% endif %}
+
+                <details class="delete-choice">
+                  <summary class="delete-button">Excluir</summary>
+                  <div class="delete-choice-menu">
+                    <form action="{{ url_for('delete_project', project_id=project.id) }}" method="POST"
+                          onsubmit="return confirm('Excluir apenas do EVR Deluxe?\n\nA pasta e os arquivos continuam no computador, mas o projeto sai da lista do app.');">
+                      <input type="hidden" name="delete_mode" value="app_only">
+                      <button class="secondary-button" type="submit">Só do app</button>
+                    </form>
+
+                    <form action="{{ url_for('delete_project', project_id=project.id) }}" method="POST"
+                          onsubmit="return confirm('Excluir projeto e arquivos?\n\nIsso apagará a pasta inteira do projeto, incluindo vídeos brutos, vídeos finalizados, áudios, transcrições e dados de processamento.\n\nEssa ação não pode ser desfeita.');">
+                      <input type="hidden" name="delete_mode" value="with_files">
+                      <button class="delete-button" type="submit">Projeto e arquivos</button>
+                    </form>
+                  </div>
+                </details>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+        <div class="empty-state project-filter-empty" data-project-filter-empty hidden>
+          <strong>Nenhum projeto encontrado.</strong>
+          <span>Ajuste a busca ou os filtros para ver outros projetos.</span>
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <strong>Nenhum projeto criado ainda.</strong>
+          <span>Crie o primeiro projeto usando o formulário acima.</span>
+        </div>
+      {% endif %}
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <div class="footer-inner">
+      <strong>Criado por Robson Yuri</strong>
+      <div class="footer-contact">
+        <span>Instagram: <a href="https://www.instagram.com/robson.yd" target="_blank" rel="noopener noreferrer">robson.yd</a></span>
+        <span>E-mail: robson.yd@gmail.com</span>
+        <span>WhatsApp: 47 98855-3204</span>
+        <span>São Paulo - SP</span>
       </div>
+    </div>
+  </footer>
 
-      <form action="{{ url_for('reset_storage_config') }}" method="POST">
-        <button class="secondary-button" type="submit">Limpar e criar uma nova pasta</button>
-      </form>
-    {% endif %}
-  </div>
-
-  <div class="box">
-    <h2>Novo projeto</h2>
-
-    <form action="/upload" method="POST" enctype="multipart/form-data">
-      <label>Título do projeto <span style="font-weight: normal; color: #777;">(opcional)</span></label>
-      <input type="text" name="project_title" placeholder="Deixe em branco para usar o nome do arquivo original">
-
-      <label>Escolha a tarefa</label>
-      <div class="radio-group">
-        <label class="radio-card">
-          <input type="radio" name="task_type" value="ai_cuts" checked>
-          <span>
-            <span class="radio-title">Cortes e Ganchos com I.A</span>
-            <span class="radio-description">Gera transcrição, sugere cortes com inteligência artificial e permite exportar conteúdo completo e gancho.</span>
-          </span>
-        </label>
-
-        <label class="radio-card">
-          <input type="radio" name="task_type" value="video_splitter">
-          <span>
-            <span class="radio-title">Video Splitter</span>
-            <span class="radio-description">Fatiar vídeos por duração fixa ou por número de partes, sem usar I.A.</span>
-          </span>
-        </label>
-      </div>
-
-      <label>Selecionar arquivo bruto</label>
-      <input type="file" name="video_file" accept=".mp4,.mov,.mkv,.avi" required>
-      <p class="small-hint">Esse arquivo será copiado para a pasta de armazenamento.</p>
-
-      <button type="submit">Criar projeto</button>
-    </form>
-  </div>
-
-  <div class="box">
-    <h2>Projetos atuais</h2>
-
-    {% if projects %}
-      <div class="project-list">
-        {% for project in projects %}
-          <div class="project-row">
-            <div class="project-info">
-              <span class="project-number">{{ project.project_number }}</span>
-              <span class="project-separator">|</span>
-              <a href="{{ url_for('project_detail', project_id=project.id) }}" class="project-title">
-                {{ project.project_title or project.id }}
-              </a>
-              <span class="project-video">— {{ project.video_name }}</span>
-              <span class="project-status">— {{ project.task_label }}</span>
-              <span class="project-status">— <strong>{{ project.status }}</strong></span>
-            </div>
-
-            <form action="{{ url_for('delete_project', project_id=project.id) }}" method="POST"
-                  onsubmit="return confirm('Tem certeza que deseja excluir este projeto?\n\nAo avançar, a pasta inteira do projeto será apagada, incluindo vídeos brutos, vídeos finalizados, áudios, transcrições, dados de processamento e todo o histórico deste projeto.\n\nDeseja continuar?');">
-              <button class="delete-button" type="submit">Excluir projeto</button>
-            </form>
-          </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p>Nenhum projeto criado ainda.</p>
-    {% endif %}
-  </div>
-
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

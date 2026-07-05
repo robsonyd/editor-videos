@@ -2,11 +2,55 @@
 import json
 import os
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 def get_status_file(project_path, job_type):
     return Path(project_path) / "Estrutura de Processamento" / "Dados de Processamento" / f"{job_type}_status.json"
+
+
+def utc_now_iso():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def parse_iso_datetime(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def calculate_elapsed_seconds(started_at, finished_at):
+    started = parse_iso_datetime(started_at)
+    finished = parse_iso_datetime(finished_at)
+    if not started or not finished:
+        return None
+
+    return max(0, int((finished - started).total_seconds()))
+
+
+def calculate_running_elapsed_seconds(started_at):
+    started = parse_iso_datetime(started_at)
+    if not started:
+        return None
+
+    now = datetime.now(started.tzinfo) if started.tzinfo else datetime.now()
+    return max(0, int((now - started).total_seconds()))
+
+
+def read_previous_status(status_file):
+    if not status_file.exists():
+        return {}
+
+    try:
+        with open(status_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
 
 def build_idle_status(job_type=None):
@@ -52,6 +96,7 @@ def build_error_status(job_type=None, message="Ocorreu um erro.", detail=""):
 def save_job_status(project_path, job_type, status):
     status_file = get_status_file(project_path, job_type)
     status_file.parent.mkdir(parents=True, exist_ok=True)
+    previous = read_previous_status(status_file)
 
     payload = dict(status or {})
     payload.setdefault("job_type", job_type)
@@ -59,6 +104,23 @@ def save_job_status(project_path, job_type, status):
     payload.setdefault("progress", 0)
     payload.setdefault("message", "Aguardando.")
     payload.setdefault("detail", "")
+
+    state = payload.get("state")
+    now = utc_now_iso()
+
+    if state == "running":
+        previous_started_at = previous.get("started_at") if previous.get("state") == "running" else None
+        payload["started_at"] = payload.get("started_at") or previous_started_at or now
+        payload["updated_at"] = now
+        payload.pop("finished_at", None)
+        payload.pop("elapsed_seconds", None)
+    elif state in {"success", "error"}:
+        payload["started_at"] = payload.get("started_at") or previous.get("started_at") or now
+        payload["finished_at"] = payload.get("finished_at") or now
+        payload["updated_at"] = payload["finished_at"]
+        elapsed_seconds = calculate_elapsed_seconds(payload.get("started_at"), payload.get("finished_at"))
+        if elapsed_seconds is not None:
+            payload["elapsed_seconds"] = elapsed_seconds
 
     with tempfile.NamedTemporaryFile(
         "w",
@@ -93,6 +155,12 @@ def load_job_status(project_path, job_type):
         data.setdefault("progress", 0)
         data.setdefault("message", "Aguardando.")
         data.setdefault("detail", "")
+
+        if data.get("state") == "running":
+            elapsed_seconds = calculate_running_elapsed_seconds(data.get("started_at"))
+            if elapsed_seconds is not None:
+                data["runtime_elapsed_seconds"] = elapsed_seconds
+
         return data
 
     except json.JSONDecodeError:
