@@ -56,3 +56,5 @@ App/config.json
 instalador/build/
 instalador/dist/*.pkg
 instalador/dist/*.log
+instalador/vendor/*.pkg
+instalador/vendor/*.sha256

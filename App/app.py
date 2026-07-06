@@ -24,9 +24,6 @@ from utils.job_status import (
 
 load_dotenv()
 
-# Garante que o app aberto pelo Finder encontre ffmpeg/ffprobe instalados via Homebrew.
-os.environ["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", "")
-
 ENV_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ENV_OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
 ENV_HUGGINGFACE_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN") or ""
@@ -78,6 +75,13 @@ app = Flask(__name__)
 BASE_DIR = Path(__file__).resolve().parent.parent
 APP_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = APP_DIR / "config.json"
+
+# Garante que o app aberto pelo Finder encontre os binários empacotados e,
+# em ambiente de desenvolvimento, os binários instalados via Homebrew.
+BUNDLED_BIN_DIR = BASE_DIR / "bin"
+PATH_PREFIXES = [str(BUNDLED_BIN_DIR), "/opt/homebrew/bin", "/usr/local/bin"]
+os.environ["PATH"] = ":".join(PATH_PREFIXES) + ":" + os.environ.get("PATH", "")
+
 DEFAULT_STORAGE_FOLDER_NAME = "VideosEditados"
 PROCESSING_FOLDER_NAME = "Estrutura de Processamento"
 PROJECT_PROCESSING_SUBFOLDERS = ["Audios", "Arquivo Video Bruto", "Dados de Processamento", "Transcrições"]

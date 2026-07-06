@@ -48,13 +48,12 @@ Depois de instalar:
 
 1. Abra **EVR Deluxe** em Aplicativos.
 2. A primeira abertura pode demorar alguns minutos.
-3. O app vai preparar o ambiente Python local do usuário.
+3. O app vai preparar o ambiente Python local do usuário automaticamente.
 4. Depois, configure OpenAI e Hugging Face na tela de Configurações.
 
 ## Requisitos desta versão interna
 
 - Mac Apple Silicon.
-- Python 3.10+ instalado.
-- Internet na primeira abertura para baixar dependências Python.
+- Internet na instalação/primeira abertura para preparar dependências Python.
 
 Uma versão futura assinada/notarizada pela Apple deve remover esse alerta de segurança.
