@@ -54,6 +54,12 @@ Depois de instalar:
 ## Requisitos desta versão interna
 
 - Mac Apple Silicon.
-- Internet na instalação/primeira abertura para preparar dependências Python.
+- Internet na primeira abertura para preparar dependências Python.
+
+## Se você testou um instalador anterior
+
+Uma build anterior podia instalar um app separado chamado **Python 3.13**. A versão atual do EVR Deluxe não usa mais esse Python global; ela leva um Python privado dentro do próprio app.
+
+Se esse app antigo aparecer em Aplicativos, ele é apenas resíduo da build anterior e não é necessário para o EVR Deluxe.
 
 Uma versão futura assinada/notarizada pela Apple deve remover esse alerta de segurança.

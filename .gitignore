@@ -58,3 +58,4 @@ instalador/dist/*.pkg
 instalador/dist/*.log
 instalador/vendor/*.pkg
 instalador/vendor/*.sha256
+instalador/vendor/*.tar.gz

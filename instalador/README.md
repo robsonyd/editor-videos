@@ -16,8 +16,8 @@ O usuário deve baixar, abrir o `.pkg`, concluir a instalação e abrir **EVR De
 
 - Instala `EVR Deluxe.app` em `/Applications`.
 - Embute uma cópia limpa do app dentro do bundle.
-- Embute o instalador oficial do Python para macOS.
-- Instala Python automaticamente caso o Mac não tenha uma versão compatível.
+- Embute um runtime Python privado para Apple Silicon.
+- Não instala Python global no Mac do usuário.
 - Embute `ffmpeg` e `ffprobe` com as bibliotecas necessárias.
 - Na primeira abertura, copia o app para:
 
@@ -26,7 +26,7 @@ O usuário deve baixar, abrir o `.pkg`, concluir a instalação e abrir **EVR De
 ```
 
 - Cria/atualiza a `.venv` do usuário.
-- Instala as dependências Python do EVR.
+- Instala automaticamente as dependências Python do EVR na primeira abertura.
 - Usa configurações e tokens locais por usuário.
 
 ## Requisitos da primeira versão interna
@@ -35,7 +35,7 @@ Esta build interna é para **Mac Apple Silicon**.
 
 O pacote inclui:
 
-- Python oficial para macOS.
+- Python 3.11 privado/standalone para Apple Silicon.
 - `ffmpeg` e `ffprobe`.
 - Modelo Whisper `ggml-base.bin`.
 - Build local de `whisper.cpp`.
@@ -60,7 +60,7 @@ instalador/dist/EVR-Deluxe-Installer.pkg
 ## Observações
 
 - O pacote não inclui vídeos, projetos, transcrições, outputs, `.env` ou `App/config.json`.
-- O pacote inclui Python oficial para macOS.
+- O pacote inclui Python 3.11 privado/standalone para Apple Silicon.
 - O pacote inclui `ffmpeg` e `ffprobe`.
 - O pacote inclui o modelo Whisper `Modelos/ggml-base.bin`.
 - O pacote inclui o build local de `whisper.cpp`.

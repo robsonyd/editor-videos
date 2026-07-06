@@ -4,7 +4,7 @@ export COPYFILE_DISABLE=1
 
 APP_NAME="EVR Deluxe"
 IDENTIFIER="com.robsonyuri.evrdeluxe"
-VERSION="1.2.0"
+VERSION="1.3.0"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 INSTALLER_DIR="$PROJECT_DIR/instalador"
 BUILD_DIR="$INSTALLER_DIR/build"
@@ -17,11 +17,12 @@ MACOS_DIR="$APP_BUNDLE/Contents/MacOS"
 RESOURCES_DIR="$APP_BUNDLE/Contents/Resources"
 SOURCE_DIR="$RESOURCES_DIR/source"
 PKG_PATH="$DIST_DIR/EVR-Deluxe-Installer.pkg"
-PYTHON_VERSION="3.13.7"
-PYTHON_PKG_NAME="python-$PYTHON_VERSION-macos11.pkg"
-PYTHON_PKG_URL="https://www.python.org/ftp/python/$PYTHON_VERSION/$PYTHON_PKG_NAME"
-PYTHON_PKG_PATH="$VENDOR_DIR/$PYTHON_PKG_NAME"
-PYTHON_SHA_PATH="$VENDOR_DIR/$PYTHON_PKG_NAME.sha256"
+PYTHON_RUNTIME_VERSION="3.11.15"
+PYTHON_RUNTIME_BUILD="20260623"
+PYTHON_RUNTIME_NAME="cpython-$PYTHON_RUNTIME_VERSION+$PYTHON_RUNTIME_BUILD-aarch64-apple-darwin-install_only_stripped.tar.gz"
+PYTHON_RUNTIME_URL="https://github.com/astral-sh/python-build-standalone/releases/download/$PYTHON_RUNTIME_BUILD/cpython-$PYTHON_RUNTIME_VERSION%2B$PYTHON_RUNTIME_BUILD-aarch64-apple-darwin-install_only_stripped.tar.gz"
+PYTHON_RUNTIME_PATH="$VENDOR_DIR/$PYTHON_RUNTIME_NAME"
+PYTHON_RUNTIME_SHA_PATH="$VENDOR_DIR/$PYTHON_RUNTIME_NAME.sha256"
 
 require_file() {
   if [ ! -e "$1" ]; then
@@ -41,13 +42,13 @@ require_file "$(command -v ffprobe || true)"
 rm -rf "$BUILD_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$SOURCE_DIR" "$SCRIPTS_DIR" "$DIST_DIR" "$VENDOR_DIR"
 
-ensure_python_installer() {
-  if [ ! -f "$PYTHON_PKG_PATH" ]; then
-    echo "Baixando Python oficial: $PYTHON_PKG_URL"
-    curl -L --fail --progress-bar -o "$PYTHON_PKG_PATH" "$PYTHON_PKG_URL"
+ensure_python_runtime() {
+  if [ ! -f "$PYTHON_RUNTIME_PATH" ]; then
+    echo "Baixando Python standalone: $PYTHON_RUNTIME_URL"
+    curl -L --fail --progress-bar -o "$PYTHON_RUNTIME_PATH" "$PYTHON_RUNTIME_URL"
   fi
 
-  shasum -a 256 "$PYTHON_PKG_PATH" > "$PYTHON_SHA_PATH"
+  shasum -a 256 "$PYTHON_RUNTIME_PATH" > "$PYTHON_RUNTIME_SHA_PATH"
 }
 
 copy_clean_app() {
@@ -67,9 +68,8 @@ copy_clean_app() {
 copy_runtime_assets() {
   cp "$PROJECT_DIR/Logo APP de Video.png" "$SOURCE_DIR/Logo APP de Video.png"
 
-  mkdir -p "$SOURCE_DIR/vendor"
-  cp "$PYTHON_PKG_PATH" "$SOURCE_DIR/vendor/$PYTHON_PKG_NAME"
-  cp "$PYTHON_SHA_PATH" "$SOURCE_DIR/vendor/$PYTHON_PKG_NAME.sha256"
+  tar -xzf "$PYTHON_RUNTIME_PATH" -C "$SOURCE_DIR"
+  chmod +x "$SOURCE_DIR/python/bin/python3" "$SOURCE_DIR/python/bin/python" 2>/dev/null || true
 
   mkdir -p "$SOURCE_DIR/Modelos"
   cp "$PROJECT_DIR/Modelos/ggml-base.bin" "$SOURCE_DIR/Modelos/ggml-base.bin"
@@ -230,10 +230,9 @@ URL="http://$HOST:$PORT"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUNDLE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BUNDLED_SOURCE="$BUNDLE_DIR/Contents/Resources/source"
-PYTHON_VERSION="3.13.7"
-PYTHON_PKG_NAME="python-$PYTHON_VERSION-macos11.pkg"
 SUPPORT_DIR="$HOME/Library/Application Support/EVR Deluxe"
 APP_DIR="$SUPPORT_DIR/App"
+RUNTIME_PYTHON_BIN="$SUPPORT_DIR/python/bin/python3"
 VENV_DIR="$SUPPORT_DIR/.venv"
 PYTHON_BIN="$VENV_DIR/bin/python"
 LOG_DIR="$HOME/Library/Logs/EVR Deluxe"
@@ -242,6 +241,7 @@ BOOTSTRAP_LOG="$LOG_DIR/bootstrap.log"
 
 export PATH="$SUPPORT_DIR/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 export PYTHONUNBUFFERED=1
+export MPLCONFIGDIR="$SUPPORT_DIR/.matplotlib"
 
 show_error() {
   local message="$1"
@@ -253,62 +253,8 @@ notify() {
   /usr/bin/osascript -e "display notification \"$message\" with title \"$APP_NAME\"" >/dev/null 2>&1 || true
 }
 
-find_compatible_python() {
-  local candidates=(
-    "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
-    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"
-    "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3"
-    "/Library/Frameworks/Python.framework/Versions/3.10/bin/python3"
-    "/opt/homebrew/bin/python3"
-    "/usr/local/bin/python3"
-    "$(command -v python3 2>/dev/null || true)"
-    "/usr/bin/python3"
-  )
-
-  for candidate in "${candidates[@]}"; do
-    if [ -x "$candidate" ]; then
-      "$candidate" - <<'PY' >/dev/null 2>&1
-import sys
-raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
-PY
-      if [ $? -eq 0 ]; then
-        echo "$candidate"
-        return 0
-      fi
-    fi
-  done
-
-  return 1
-}
-
-install_bundled_python() {
-  local python_pkg="$BUNDLED_SOURCE/vendor/$PYTHON_PKG_NAME"
-  local python_sha="$BUNDLED_SOURCE/vendor/$PYTHON_PKG_NAME.sha256"
-
-  if [ ! -f "$python_pkg" ]; then
-    show_error "O instalador interno do Python não foi encontrado dentro do EVR Deluxe."
-    exit 1
-  fi
-
-  if [ -f "$python_sha" ]; then
-    local expected
-    local actual
-    expected="$(/usr/bin/awk '{print $1}' "$python_sha")"
-    actual="$(/usr/bin/shasum -a 256 "$python_pkg" | /usr/bin/awk '{print $1}')"
-    if [ "$expected" != "$actual" ]; then
-      show_error "O instalador interno do Python está corrompido. Baixe novamente o EVR Deluxe."
-      exit 1
-    fi
-  fi
-
-  notify "Instalando Python interno do EVR Deluxe."
-  /usr/bin/osascript <<APPLESCRIPT >> "$BOOTSTRAP_LOG" 2>&1
-do shell script "/usr/sbin/installer -pkg " & quoted form of "$python_pkg" & " -target /" with administrator privileges
-APPLESCRIPT
-}
-
 sync_source() {
-  mkdir -p "$SUPPORT_DIR" "$LOG_DIR"
+  mkdir -p "$SUPPORT_DIR" "$LOG_DIR" "$MPLCONFIGDIR"
   /usr/bin/rsync -a --delete "$BUNDLED_SOURCE/" "$SUPPORT_DIR/" \
     --exclude ".venv/" \
     --exclude "App/config.json" \
@@ -346,23 +292,33 @@ raise SystemExit(0 if all(importlib.util.find_spec(name) for name in required) e
 PY
 }
 
+venv_uses_supported_python() {
+  if [ ! -x "$PYTHON_BIN" ]; then
+    return 1
+  fi
+  "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+import sys
+raise SystemExit(0 if sys.version_info[:2] == (3, 11) else 1)
+PY
+}
+
 bootstrap_python() {
   mkdir -p "$LOG_DIR"
   touch "$BOOTSTRAP_LOG"
 
+  if [ ! -x "$RUNTIME_PYTHON_BIN" ]; then
+    show_error "O Python interno do EVR Deluxe não foi encontrado. Reinstale o aplicativo."
+    exit 1
+  fi
+
+  if [ -x "$PYTHON_BIN" ] && ! venv_uses_supported_python; then
+    notify "Atualizando ambiente Python interno do EVR Deluxe."
+    /bin/rm -rf "$VENV_DIR" >> "$BOOTSTRAP_LOG" 2>&1
+  fi
+
   if [ ! -x "$PYTHON_BIN" ]; then
-    local system_python
-    system_python="$(find_compatible_python || true)"
-    if [ -z "$system_python" ]; then
-      install_bundled_python
-      system_python="$(find_compatible_python || true)"
-      if [ -z "$system_python" ]; then
-        show_error "O Python interno foi instalado, mas não consegui localizar o binário. Veja o log em: $BOOTSTRAP_LOG"
-        exit 1
-      fi
-    fi
     notify "Preparando ambiente Python. A primeira abertura pode levar alguns minutos."
-    "$system_python" -m venv "$VENV_DIR" >> "$BOOTSTRAP_LOG" 2>&1
+    "$RUNTIME_PYTHON_BIN" -m venv "$VENV_DIR" >> "$BOOTSTRAP_LOG" 2>&1
   fi
 
   if ! dependencies_ok || requirements_changed; then
@@ -471,61 +427,9 @@ LAUNCHER
 }
 
 write_postinstall() {
-  cat > "$SCRIPTS_DIR/postinstall" <<POSTINSTALL
+  cat > "$SCRIPTS_DIR/postinstall" <<'POSTINSTALL'
 #!/bin/bash
 set -e
-
-APP_NAME="$APP_NAME"
-PYTHON_PKG_NAME="$PYTHON_PKG_NAME"
-APP_BUNDLE="/Applications/\$APP_NAME.app"
-PYTHON_PKG="\$APP_BUNDLE/Contents/Resources/source/vendor/\$PYTHON_PKG_NAME"
-PYTHON_SHA="\$PYTHON_PKG.sha256"
-INSTALL_LOG="/var/log/evr-deluxe-install.log"
-
-compatible_python_exists() {
-  local candidates=(
-    "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
-    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"
-    "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3"
-    "/Library/Frameworks/Python.framework/Versions/3.10/bin/python3"
-    "/opt/homebrew/bin/python3"
-    "/usr/local/bin/python3"
-    "/usr/bin/python3"
-  )
-
-  for candidate in "\${candidates[@]}"; do
-    if [ -x "\$candidate" ]; then
-      "\$candidate" - <<'PY' >/dev/null 2>&1
-import sys
-raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
-PY
-      if [ \$? -eq 0 ]; then
-        return 0
-      fi
-    fi
-  done
-
-  return 1
-}
-
-if ! compatible_python_exists; then
-  echo "Instalando Python interno do EVR Deluxe..." >> "\$INSTALL_LOG"
-  if [ ! -f "\$PYTHON_PKG" ]; then
-    echo "Instalador Python não encontrado: \$PYTHON_PKG" >> "\$INSTALL_LOG"
-    exit 1
-  fi
-
-  if [ -f "\$PYTHON_SHA" ]; then
-    expected="\$(/usr/bin/awk '{print \$1}' "\$PYTHON_SHA")"
-    actual="\$(/usr/bin/shasum -a 256 "\$PYTHON_PKG" | /usr/bin/awk '{print \$1}')"
-    if [ "\$expected" != "\$actual" ]; then
-      echo "Checksum do Python interno não confere." >> "\$INSTALL_LOG"
-      exit 1
-    fi
-  fi
-
-  /usr/sbin/installer -pkg "\$PYTHON_PKG" -target / >> "\$INSTALL_LOG" 2>&1
-fi
 
 /usr/bin/touch "/Applications/EVR Deluxe.app" 2>/dev/null || true
 exit 0
@@ -533,7 +437,7 @@ POSTINSTALL
   chmod +x "$SCRIPTS_DIR/postinstall"
 }
 
-ensure_python_installer
+ensure_python_runtime
 copy_clean_app
 copy_runtime_assets
 copy_ffmpeg_runtime
