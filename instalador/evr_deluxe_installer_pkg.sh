@@ -17,6 +17,8 @@ MACOS_DIR="$APP_BUNDLE/Contents/MacOS"
 RESOURCES_DIR="$APP_BUNDLE/Contents/Resources"
 SOURCE_DIR="$RESOURCES_DIR/source"
 PKG_PATH="$DIST_DIR/EVR-Deluxe-Installer.pkg"
+APP_SIGN_IDENTITY="${EVR_APP_SIGN_IDENTITY:-}"
+APP_ENTITLEMENTS_PATH="$BUILD_DIR/EVRDeluxe.entitlements"
 PYTHON_RUNTIME_VERSION="3.11.15"
 PYTHON_RUNTIME_BUILD="20260623"
 PYTHON_RUNTIME_NAME="cpython-$PYTHON_RUNTIME_VERSION+$PYTHON_RUNTIME_BUILD-aarch64-apple-darwin-install_only_stripped.tar.gz"
@@ -189,6 +191,56 @@ patch_whisper_rpath() {
   done
 
   codesign --force --sign - "$whisper_bin" >/dev/null 2>&1 || true
+}
+
+write_entitlements() {
+  cat > "$APP_ENTITLEMENTS_PATH" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+}
+
+sign_app_bundle() {
+  if [ -z "$APP_SIGN_IDENTITY" ]; then
+    echo "Assinatura do app: ignorada. Defina EVR_APP_SIGN_IDENTITY para assinar."
+    return 0
+  fi
+
+  write_entitlements
+  echo "Assinando binários internos com: $APP_SIGN_IDENTITY"
+
+  while IFS= read -r -d '' file_path; do
+    if file "$file_path" | grep -q "Mach-O"; then
+      codesign \
+        --force \
+        --options runtime \
+        --timestamp \
+        --entitlements "$APP_ENTITLEMENTS_PATH" \
+        --sign "$APP_SIGN_IDENTITY" \
+        "$file_path"
+    fi
+  done < <(find "$APP_BUNDLE" -type f -print0)
+
+  codesign \
+    --force \
+    --deep \
+    --options runtime \
+    --timestamp \
+    --entitlements "$APP_ENTITLEMENTS_PATH" \
+    --sign "$APP_SIGN_IDENTITY" \
+    "$APP_BUNDLE"
+
+  codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
 }
 
 write_info_plist() {
@@ -445,6 +497,7 @@ patch_whisper_rpath
 write_info_plist
 write_launcher
 write_postinstall
+sign_app_bundle
 
 find "$ROOT_DIR" -name ".DS_Store" -delete
 find "$ROOT_DIR" -name "._*" -delete

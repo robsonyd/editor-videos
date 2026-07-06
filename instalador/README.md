@@ -57,6 +57,20 @@ Saída:
 instalador/dist/EVR-Deluxe-Installer.pkg
 ```
 
+## Gerar pacote assinado e notarizado
+
+Quando os certificados Apple estiverem instalados no Mac, use:
+
+```bash
+instalador/evr_deluxe_sign_notarize.sh
+```
+
+Passo a passo completo:
+
+```txt
+instalador/ASSINATURA_E_NOTARIZACAO.md
+```
+
 ## Observações
 
 - O pacote não inclui vídeos, projetos, transcrições, outputs, `.env` ou `App/config.json`.
