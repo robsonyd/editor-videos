@@ -62,3 +62,4 @@ instalador/dist/EVR-Deluxe-Installer.pkg
 - O pacote inclui o modelo Whisper `Modelos/ggml-base.bin`.
 - O pacote inclui o build local de `whisper.cpp`.
 - O pacote ainda não está assinado/notarizado pela Apple.
+- Por não estar assinado/notarizado, Macs podem bloquear a abertura após download pelo navegador. Veja `INSTRUCOES_TESTE_INTERNO.md`.
