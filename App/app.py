@@ -4,6 +4,8 @@ import os
 import re
 import shutil
 import subprocess
+import sys
+import tempfile
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -222,9 +224,9 @@ def get_api_settings() -> dict:
     settings = load_app_config().get("api_settings", {})
 
     return {
-        "openai_api_key": settings.get("openai_api_key") or ENV_OPENAI_API_KEY,
+        "openai_api_key": settings.get("openai_api_key") or "",
         "openai_model": settings.get("openai_model") or ENV_OPENAI_MODEL,
-        "huggingface_token": settings.get("huggingface_token") or ENV_HUGGINGFACE_TOKEN,
+        "huggingface_token": settings.get("huggingface_token") or "",
         "pyannote_model": settings.get("pyannote_model") or ENV_PYANNOTE_MODEL,
     }
 
@@ -578,7 +580,10 @@ def run_processing_command(command: list[str], **kwargs):
     profile = get_performance_profile()
     env = get_processing_env(profile)
     if env:
-        kwargs.setdefault("env", env)
+        merged_env = os.environ.copy()
+        merged_env.update(kwargs.pop("env", {}) or {})
+        merged_env.update(env)
+        kwargs["env"] = merged_env
 
     key = get_current_job_key()
     raise_if_current_job_cancelled()
@@ -1192,21 +1197,22 @@ def chunk_revision_blocks(blocks: list[dict], max_chars: int = 9000, max_items: 
     return chunks
 
 
-def copy_original_transcription_as_revised(project_id: str, reason: str) -> dict:
-    txt_path = get_transcript_txt_path(project_id)
-    srt_path = get_transcript_srt_path(project_id)
-    revised_txt_path = get_revised_transcript_txt_path(project_id)
-    revised_srt_path = get_revised_transcript_srt_path(project_id)
+def cleanup_transcription_revision_artifacts(project_id: str):
+    for path in (
+        get_revised_transcript_txt_path(project_id),
+        get_revised_transcript_srt_path(project_id),
+        get_transcript_revision_error_path(project_id),
+    ):
+        if path.exists():
+            path.unlink()
 
-    if txt_path.exists():
-        revised_txt_path.write_text(txt_path.read_text(encoding="utf-8"), encoding="utf-8")
-    if srt_path.exists():
-        revised_srt_path.write_text(srt_path.read_text(encoding="utf-8"), encoding="utf-8")
 
+def mark_transcription_revision_failed(project_id: str, reason: str) -> dict:
+    cleanup_transcription_revision_artifacts(project_id)
     get_transcript_revision_error_path(project_id).write_text(reason, encoding="utf-8")
     return {
         "applied": False,
-        "status": "fallback",
+        "status": "failed",
         "detail": reason,
         "glossary_count": len(get_glossary_entries()),
     }
@@ -1215,17 +1221,18 @@ def copy_original_transcription_as_revised(project_id: str, reason: str) -> dict
 def revise_transcription_with_ai(project_id: str) -> dict:
     client = get_openai_client()
     if not client:
-        return copy_original_transcription_as_revised(project_id, "OpenAI não configurada; usando transcrição original como fallback revisado.")
+        raise RuntimeError(
+            "OpenAI API Key ausente. Configure e teste a OpenAI em Configurações antes de gerar a transcrição revisada."
+        )
 
     srt_path = get_transcript_srt_path(project_id)
-    txt_path = get_transcript_txt_path(project_id)
     if not srt_path.exists():
-        return copy_original_transcription_as_revised(project_id, "SRT original ausente; usando transcrição original como fallback revisado.")
+        raise RuntimeError("SRT original ausente. Não foi possível revisar a transcrição com IA.")
 
     srt_text = srt_path.read_text(encoding="utf-8")
     blocks = parse_srt_blocks_for_revision(srt_text)
     if not blocks:
-        return copy_original_transcription_as_revised(project_id, "Nenhum bloco SRT válido para revisão; usando original.")
+        raise RuntimeError("Nenhum bloco SRT válido para revisão com IA.")
 
     glossary_entries = get_glossary_entries()
     glossary_text = format_glossary_for_prompt(glossary_entries)
@@ -1354,61 +1361,74 @@ def normalize_speaker_labels(diarization_segments: list[dict]) -> tuple[list[dic
     return diarization_segments, mapping
 
 
-# Roda diarização real de áudio com pyannote.audio.
-def run_pyannote_diarization(wav_path: Path, num_speakers=None, min_speakers=None, max_speakers=None) -> list[dict]:
-    huggingface_token = get_huggingface_token()
-    pyannote_model = get_pyannote_model()
-    profile = get_performance_profile()
+# Worker isolado para a diarização. Manter Pyannote em subprocesso permite
+# interromper a etapa 3 de verdade quando o usuário clica em parar.
+PYANNOTE_WORKER_CODE = r'''
+import json
+import os
+import sys
 
-    if not huggingface_token:
-        raise RuntimeError(
-            "Token da Hugging Face ausente. Configure o token em Configurações > APIs e Integrações."
-        )
 
-    processing_env = get_processing_env(profile)
-    if processing_env:
-        os.environ.update(processing_env)
+def format_seconds_to_time(seconds):
+    seconds = float(seconds)
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    milliseconds = int((seconds - int(seconds)) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{milliseconds:03d}"
+
+
+def main():
+    payload = json.loads(sys.stdin.read() or "{}")
+    wav_path = payload["wav_path"]
+    output_path = payload["output_path"]
+    token = payload["huggingface_token"]
+    model = payload["pyannote_model"]
+    threads = payload.get("threads")
+
+    if threads:
+        threads = int(threads)
+        for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
+            os.environ[key] = str(threads)
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     try:
         from pyannote.audio import Pipeline
         try:
             import torch
-
-            if profile.get("threads"):
-                torch.set_num_threads(profile["threads"])
-                torch.set_num_interop_threads(max(1, min(2, profile["threads"])))
+            if threads:
+                torch.set_num_threads(threads)
+                torch.set_num_interop_threads(max(1, min(2, threads)))
         except Exception:
             pass
     except ImportError as exc:
-        raise RuntimeError(
-            "pyannote.audio não está instalado. Instale as dependências de diarização antes de mapear participantes."
-        ) from exc
+        print("pyannote.audio não está instalado. Instale as dependências de diarização antes de mapear participantes.", file=sys.stderr)
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(21)
 
     try:
         try:
-            pipeline = Pipeline.from_pretrained(pyannote_model, token=huggingface_token)
+            pipeline = Pipeline.from_pretrained(model, token=token)
         except TypeError:
-            pipeline = Pipeline.from_pretrained(pyannote_model, use_auth_token=huggingface_token)
+            pipeline = Pipeline.from_pretrained(model, use_auth_token=token)
     except Exception as exc:
-        raise RuntimeError(
-            f"não foi possível carregar o modelo de diarização ({pyannote_model}). Verifique token, acesso ao modelo e internet."
-        ) from exc
+        print(f"não foi possível carregar o modelo de diarização ({model}). Verifique token, acesso ao modelo e internet.", file=sys.stderr)
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(22)
 
     diarization_kwargs = {}
-    if num_speakers:
-        diarization_kwargs["num_speakers"] = int(num_speakers)
-    else:
-        if min_speakers:
-            diarization_kwargs["min_speakers"] = int(min_speakers)
-        if max_speakers:
-            diarization_kwargs["max_speakers"] = int(max_speakers)
+    for key in ("num_speakers", "min_speakers", "max_speakers"):
+        value = payload.get(key)
+        if value:
+            diarization_kwargs[key] = int(value)
 
-    diarization_output = pipeline(str(wav_path), **diarization_kwargs)
+    try:
+        diarization_output = pipeline(wav_path, **diarization_kwargs)
+    except Exception as exc:
+        print(f"falha ao rodar diarização no áudio: {exc}", file=sys.stderr)
+        raise SystemExit(23)
 
-    # pyannote.audio 4.x retorna um DiarizeOutput.
-    # A Annotation real fica em output.speaker_diarization.
     diarization = getattr(diarization_output, "speaker_diarization", diarization_output)
-
     segments = []
 
     if hasattr(diarization, "itertracks"):
@@ -1426,7 +1446,6 @@ def run_pyannote_diarization(wav_path: Path, num_speakers=None, min_speakers=Non
                 }
             )
     else:
-        # Fallback compatível com alguns outputs novos que iteram como (turn, speaker).
         for item in diarization:
             if len(item) == 2:
                 turn, speaker = item
@@ -1446,6 +1465,57 @@ def run_pyannote_diarization(wav_path: Path, num_speakers=None, min_speakers=Non
                     "end": format_seconds_to_time(turn.end),
                 }
             )
+
+    with open(output_path, "w", encoding="utf-8") as file:
+        json.dump(segments, file, ensure_ascii=False)
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+
+# Roda diarização real de áudio com pyannote.audio.
+def run_pyannote_diarization(wav_path: Path, num_speakers=None, min_speakers=None, max_speakers=None) -> list[dict]:
+    huggingface_token = get_huggingface_token()
+    pyannote_model = get_pyannote_model()
+    profile = get_performance_profile()
+
+    if not huggingface_token:
+        raise RuntimeError(
+            "Token da Hugging Face ausente. Configure o token em Configurações > APIs e Integrações."
+        )
+
+    with tempfile.TemporaryDirectory(prefix="evr_pyannote_") as temp_dir:
+        worker_path = Path(temp_dir) / "pyannote_worker.py"
+        output_path = Path(temp_dir) / "diarization_segments.json"
+        worker_path.write_text(PYANNOTE_WORKER_CODE, encoding="utf-8")
+
+        payload = {
+            "wav_path": str(wav_path),
+            "output_path": str(output_path),
+            "huggingface_token": huggingface_token,
+            "pyannote_model": pyannote_model,
+            "threads": profile.get("threads"),
+            "num_speakers": int(num_speakers) if num_speakers else None,
+            "min_speakers": int(min_speakers) if min_speakers and not num_speakers else None,
+            "max_speakers": int(max_speakers) if max_speakers and not num_speakers else None,
+        }
+
+        run_processing_command(
+            [sys.executable, str(worker_path)],
+            input=json.dumps(payload, ensure_ascii=False),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        if not output_path.exists():
+            raise RuntimeError("Pyannote não retornou segmentos de participantes.")
+
+        segments = json.loads(output_path.read_text(encoding="utf-8"))
+        if not isinstance(segments, list):
+            raise RuntimeError("Pyannote retornou um formato inválido de segmentos.")
 
     segments, _ = normalize_speaker_labels(segments)
     return segments
@@ -2153,12 +2223,17 @@ def run_generate_transcription_job(project_id: str):
             raise FileNotFoundError("whisper-cli não encontrado")
         if not WHISPER_MODEL_PATH.exists():
             raise FileNotFoundError("modelo whisper não encontrado")
+        if not get_openai_client():
+            raise RuntimeError(
+                "OpenAI API Key ausente. A transcrição revisada por IA é obrigatória; configure e teste a OpenAI em Configurações antes de começar."
+            )
 
         project_path = get_project_path(project_id)
         wav_path = get_project_subdir(project_id, "Audios") / f"{project_id}.wav"
         transcript_base = get_project_subdir(project_id, "Transcrições") / f"{project_id}_transcricao"
         transcript_txt_path = get_transcript_txt_path(project_id)
         transcript_srt_path = get_transcript_srt_path(project_id)
+        cleanup_transcription_revision_artifacts(project_id)
 
         update_job(project_id, "generate_transcription", build_running_status("generate_transcription", 10, "Preparando áudio..."))
         run_processing_command(
@@ -2214,10 +2289,7 @@ def run_generate_transcription_job(project_id: str):
             raise RuntimeError("txt/srt não gerado")
 
         update_job(project_id, "generate_transcription", build_running_status("generate_transcription", 92, "Revisando transcrição com IA...", "Aplicando glossário e correções automáticas."))
-        try:
-            revision_result = revise_transcription_with_ai(project_id)
-        except Exception as revision_error:
-            revision_result = copy_original_transcription_as_revised(project_id, f"Falha na revisão automática: {revision_error}")
+        revision_result = revise_transcription_with_ai(project_id)
 
         metadata["transcription_generated"] = "yes"
         metadata["transcription_revision_status"] = revision_result["status"]
@@ -2225,13 +2297,9 @@ def run_generate_transcription_job(project_id: str):
         metadata["transcription_revision_glossary_count"] = str(revision_result["glossary_count"])
         metadata["transcription_revision_model"] = get_openai_model()
         metadata["transcription_revision_model_label"] = get_openai_model_display_label()
-        metadata["status"] = "Transcrição revisada com IA" if revision_result["applied"] else "Transcrição gerada com fallback sem revisão"
+        metadata["status"] = "Transcrição revisada com IA"
         save_metadata(project_id, metadata)
-        success_detail = (
-            f"TXT e SRT revisados foram gerados. Glossário utilizado: {revision_result['glossary_count']} termo(s)."
-            if revision_result["applied"]
-            else f"TXT e SRT revisados foram criados a partir da original. {revision_result['detail']}"
-        )
+        success_detail = f"TXT e SRT revisados foram gerados. Glossário utilizado: {revision_result['glossary_count']} termo(s)."
         update_job(project_id, "generate_transcription", build_success_status("generate_transcription", "Transcrição concluída", success_detail))
     except subprocess.CalledProcessError as e:
         raw = e.stderr or e.stdout or str(e)
@@ -2334,7 +2402,11 @@ def run_identify_speakers_job(project_id: str):
         )
     except subprocess.CalledProcessError as e:
         raw = e.stderr or e.stdout or str(e)
-        fail_job(project_id, "identify_speakers", f"ffmpeg falhou: {raw}")
+        command_parts = [str(part) for part in (e.cmd or [])]
+        if any("ffmpeg" in part for part in command_parts):
+            fail_job(project_id, "identify_speakers", f"ffmpeg falhou: {raw}")
+        else:
+            fail_job(project_id, "identify_speakers", f"pyannote falhou: {raw}")
     except Exception as e:
         fail_job(project_id, "identify_speakers", str(e))
 

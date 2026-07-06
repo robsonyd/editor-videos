@@ -271,7 +271,7 @@ PLIST
 }
 
 write_launcher() {
-  cat > "$MACOS_DIR/$APP_NAME" <<'LAUNCHER'
+  cat > "$RESOURCES_DIR/launcher.sh" <<'LAUNCHER'
 #!/bin/bash
 set -u
 
@@ -424,8 +424,18 @@ PY
   fi
 }
 
+open_browser_window() {
+  local chrome_binary="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  if [ -x "$chrome_binary" ]; then
+    "$chrome_binary" --app="$URL" --new-window >/dev/null 2>&1 &
+    return 0
+  fi
+
+  /usr/bin/open -b com.google.Chrome "$URL" 2>/dev/null || /usr/bin/open "$URL"
+}
+
 monitor_browser() {
-  /usr/bin/open -a "Google Chrome" "$URL" 2>/dev/null || /usr/bin/open "$URL"
+  open_browser_window
 
   while /bin/kill -0 "$SERVER_PID" 2>/dev/null; do
     /bin/sleep 3
@@ -475,6 +485,42 @@ start_server
 monitor_browser
 LAUNCHER
 
+  chmod +x "$RESOURCES_DIR/launcher.sh"
+
+  cat > "$BUILD_DIR/evr_launcher.c" <<'C'
+#include <mach-o/dyld.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+int main(void) {
+  char executable_path[PATH_MAX];
+  uint32_t size = sizeof(executable_path);
+  if (_NSGetExecutablePath(executable_path, &size) != 0) {
+    return 1;
+  }
+
+  char *last_slash = strrchr(executable_path, '/');
+  if (!last_slash) {
+    return 1;
+  }
+  *last_slash = '\0';
+
+  char script_path[PATH_MAX];
+  int written = snprintf(script_path, sizeof(script_path), "%s/../Resources/launcher.sh", executable_path);
+  if (written < 0 || written >= (int)sizeof(script_path)) {
+    return 1;
+  }
+
+  execl("/bin/bash", "bash", script_path, (char *)NULL);
+  return 1;
+}
+C
+
+  /usr/bin/clang "$BUILD_DIR/evr_launcher.c" -o "$MACOS_DIR/$APP_NAME"
   chmod +x "$MACOS_DIR/$APP_NAME"
 }
 
