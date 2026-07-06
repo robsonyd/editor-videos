@@ -18,6 +18,12 @@ O item não foi aberto. A Apple não pode verificar se ele está livre de malwar
 
 ## Se aparecer apenas "Mover para o Lixo"
 
+Para um guia mais direto desta etapa, veja também:
+
+```txt
+PASSO_A_PASSO_AJUSTES_SISTEMA.md
+```
+
 1. Abra **Ajustes do Sistema**.
 2. Vá em **Privacidade e Segurança**.
 3. Role até a seção **Segurança**.
