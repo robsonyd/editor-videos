@@ -51,3 +51,8 @@ whisper.cpp/
 
 # Configuração local do app
 App/config.json
+
+# Artefatos locais de instalador
+instalador/build/
+instalador/dist/*.pkg
+instalador/dist/*.log
