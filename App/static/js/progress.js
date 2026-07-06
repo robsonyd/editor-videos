@@ -12,6 +12,7 @@
   const hint = document.getElementById('progress-hint');
   const mode = document.getElementById('progress-mode');
   const cancelButton = document.getElementById('progress-cancel-button');
+  const actionHint = document.getElementById('progress-action-hint');
   const magicGif = document.getElementById('progress-magic-gif');
   const magicPercent = document.getElementById('progress-magic-percent');
 
@@ -114,7 +115,7 @@
 
     if (!stateLabel) return;
     if (state === 'success') stateLabel.textContent = 'Concluído';
-    else if (state === 'error') stateLabel.textContent = 'Interrompido';
+    else if (state === 'error') stateLabel.textContent = 'Falhou';
     else stateLabel.textContent = 'Processando';
   }
 
@@ -185,9 +186,18 @@
 
   function setCancelButtonState() {
     if (!cancelButton) return;
+
+    if (latestStatus && latestStatus.state === 'error') {
+      cancelButton.disabled = false;
+      cancelButton.textContent = 'Concluir';
+      if (actionHint) actionHint.textContent = 'Leia o erro antes de voltar para o projeto.';
+      return;
+    }
+
     const isRunning = latestStatus && latestStatus.state === 'running';
     cancelButton.disabled = !isRunning || cancelRequested;
     cancelButton.textContent = cancelRequested ? 'Interrompendo...' : 'Parar processamento';
+    if (actionHint) actionHint.textContent = 'Interrompe o job atual e libera o EVR Deluxe.';
   }
 
   function startElapsedTimer() {
@@ -325,14 +335,19 @@
     }
   }
 
-  function releaseAfterTemporaryError(delay = 4200) {
+  function holdErrorUntilAcknowledged() {
     stopPolling();
     stopElapsedTimer();
     clearActiveJob();
-    setTimeout(() => {
-      latestStatus = null;
-      hideProgressLock();
-    }, delay);
+    setCancelButtonState();
+  }
+
+  function acknowledgeErrorAndReload() {
+    allowUnloadWithoutCancel = true;
+    stopPolling();
+    stopElapsedTimer();
+    clearActiveJob();
+    window.location.reload();
   }
 
   async function pollStatus(projectId, jobType) {
@@ -359,17 +374,20 @@
       stopElapsedTimer();
       clearActiveJob();
 
-      if (status.state === 'success' || status.state === 'error') {
-        if (status.state === 'success') {
-          sessionStorage.setItem(
-            'evr_completed_progress_job',
-            JSON.stringify({ projectId, jobType, finishedAt: Date.now() })
-          );
-        }
+      if (status.state === 'success') {
+        sessionStorage.setItem(
+          'evr_completed_progress_job',
+          JSON.stringify({ projectId, jobType, finishedAt: Date.now() })
+        );
         setTimeout(() => {
           allowUnloadWithoutCancel = true;
           window.location.reload();
-        }, status.state === 'success' ? 1300 : 2200);
+        }, 1300);
+        return;
+      }
+
+      if (status.state === 'error') {
+        holdErrorUntilAcknowledged();
       }
     } catch (error) {
       updateBar(
@@ -381,7 +399,7 @@
         },
         jobType
       );
-      releaseAfterTemporaryError(5200);
+      holdErrorUntilAcknowledged();
     }
   }
 
@@ -483,7 +501,7 @@
           },
           jobType
         );
-        releaseAfterTemporaryError();
+        holdErrorUntilAcknowledged();
         return;
       }
 
@@ -498,7 +516,7 @@
         },
         jobType
       );
-      releaseAfterTemporaryError();
+      holdErrorUntilAcknowledged();
     }
   }
 
@@ -510,7 +528,13 @@
   });
 
   if (cancelButton) {
-    cancelButton.addEventListener('click', cancelActiveJobFromButton);
+    cancelButton.addEventListener('click', () => {
+      if (latestStatus && latestStatus.state === 'error') {
+        acknowledgeErrorAndReload();
+        return;
+      }
+      cancelActiveJobFromButton();
+    });
   }
 
   window.EVRProgress = {

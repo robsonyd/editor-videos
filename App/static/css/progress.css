@@ -456,9 +456,27 @@ body.progress-lock {
   opacity: 0.58;
 }
 
-#progress-panel.is-success .progress-actions,
-#progress-panel.is-error .progress-actions {
+#progress-panel.is-success .progress-actions {
   display: none;
+}
+
+#progress-panel.is-error .progress-cancel-button {
+  border-color: rgba(241, 220, 148, 0.48);
+  color: #16120a;
+  background: linear-gradient(180deg, #ffe9a8, #d9bb68);
+  box-shadow:
+    0 16px 42px rgba(241, 220, 148, 0.16),
+    0 0 18px rgba(241, 220, 148, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.36);
+}
+
+#progress-panel.is-error .progress-cancel-button:hover:not(:disabled) {
+  border-color: rgba(255, 236, 169, 0.7);
+  background: linear-gradient(180deg, #fff0b8, #e4c875);
+  box-shadow:
+    0 18px 48px rgba(241, 220, 148, 0.20),
+    0 0 24px rgba(241, 220, 148, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 #progress-panel.is-success .progress-dot,
