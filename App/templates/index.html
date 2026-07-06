@@ -24,15 +24,19 @@
   </header>
 
   <main class="app-main">
-    {% if not ai_integrations_alert.ok %}
-      <a class="ai-setup-alert is-{{ ai_integrations_alert.severity }}" href="{{ url_for('settings_page') }}" data-tour-target="api-alert">
-        <span class="ai-setup-alert-icon" aria-hidden="true">!</span>
-        <span>
-          <strong>Inteligência artificial pendente</strong>
-          <small>{{ ai_integrations_alert.message }} Pendências: {{ ai_integrations_alert.pending|join(", ") }}.</small>
-        </span>
-        <em>Configurar APIs</em>
-      </a>
+    {% if home_alerts %}
+      <div class="home-alert-stack">
+        {% for alert in home_alerts %}
+          <a class="ai-setup-alert is-{{ alert.severity }}" href="{{ alert.href }}" {% if alert.tour_target %}data-tour-target="{{ alert.tour_target }}"{% endif %}>
+            <span class="ai-setup-alert-icon" aria-hidden="true">!</span>
+            <span>
+              <strong>{{ alert.title }}</strong>
+              <small>{{ alert.message }}</small>
+            </span>
+            <em>{{ alert.action_label }}</em>
+          </a>
+        {% endfor %}
+      </div>
     {% endif %}
 
     <section class="home-console home-console-simple">

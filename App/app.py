@@ -99,6 +99,13 @@ ACTIVE_KEEP_AWAKE_PROCESSES: dict[tuple[str, str], subprocess.Popen] = {}
 CANCELLED_JOBS: set[tuple[str, str]] = set()
 
 JOB_TYPES = ["generate_transcription", "identify_speakers", "suggest_cuts", "process_cuts", "split_video"]
+JOB_HOME_LABELS = {
+    "generate_transcription": "Transcrição e revisão",
+    "identify_speakers": "Mapeamento de participantes",
+    "suggest_cuts": "Sugestões da IA",
+    "process_cuts": "Processamento de cortes",
+    "split_video": "Video Splitter",
+}
 JOB_HISTORY_LIMIT = 12
 DEFAULT_AI_CUT_OPTION_COUNT = 6
 DEFAULT_AI_HOOK_OPTION_COUNT = 1
@@ -1967,7 +1974,9 @@ def fail_job(project_id: str, job_type: str, raw_error: str):
         return
 
     friendly = humanize_error(job_type, raw_error)
-    update_job(project_id, job_type, build_error_status(job_type, friendly["message"], friendly["detail"]))
+    error_status = build_error_status(job_type, friendly["message"], friendly["detail"])
+    error_status["support_hint"] = friendly.get("support_hint", "")
+    update_job(project_id, job_type, error_status)
     metadata = load_metadata(project_id)
     metadata["status"] = friendly["message"]
     save_metadata(project_id, metadata)
@@ -3002,6 +3011,60 @@ def get_home_project_stage_label(project_id: str, metadata: dict) -> str:
     return "Etapa 1 - Vídeo carregado"
 
 
+def get_project_error_alert(project_id: str, metadata: dict) -> dict | None:
+    project_path = get_project_path(project_id)
+    if not project_path.exists():
+        return None
+
+    latest = None
+    for job_type in JOB_TYPES:
+        status = load_job_status(project_path, job_type)
+        if status.get("state") != "error":
+            continue
+        if status.get("message") == "Processamento cancelado":
+            continue
+
+        timestamp = (
+            parse_status_datetime(status.get("finished_at"))
+            or parse_status_datetime(status.get("updated_at"))
+        )
+        timestamp_sort = timestamp.timestamp() if timestamp else 0
+        item = {
+            "job_type": job_type,
+            "status": status,
+            "timestamp": timestamp,
+            "timestamp_sort": timestamp_sort,
+        }
+        if latest is None or item["timestamp_sort"] > latest["timestamp_sort"]:
+            latest = item
+
+    if not latest:
+        return None
+
+    status = latest["status"]
+    job_type = latest["job_type"]
+    title = metadata.get("project_title") or project_id
+    detail = str(status.get("detail") or "").strip()
+    support_hint = str(status.get("support_hint") or "").strip()
+    message_parts = [part for part in (detail, support_hint) if part]
+    message = " ".join(message_parts) or "Abra o projeto, revise a etapa com erro e tente novamente."
+
+    target_settings = any(
+        term in f"{status.get('message', '')} {detail}".lower()
+        for term in ("openai", "hugging face", "api key", "token")
+    )
+
+    return {
+        "severity": "danger",
+        "title": f"{title}: {JOB_HOME_LABELS.get(job_type, 'Processamento')} falhou",
+        "message": message,
+        "href": url_for("settings_page") if target_settings else url_for("project_detail", project_id=project_id),
+        "action_label": "Abrir configurações" if target_settings else "Abrir projeto",
+        "sort_time": latest["timestamp"].isoformat() if latest["timestamp"] else "",
+        "sort_key": latest["timestamp_sort"],
+    }
+
+
 def duplicate_project_with_options(source_project_id: str, options: dict) -> str:
     source_metadata = load_metadata(source_project_id)
     source_project_path = get_project_path(source_project_id)
@@ -3101,6 +3164,7 @@ def duplicate_project_with_options(source_project_id: str, options: dict) -> str
 @app.route("/")
 def home():
     projects = []
+    project_error_alerts = []
     storage_status = get_storage_status()
     config = load_app_config()
     show_onboarding = not bool(config.get("onboarding", {}).get("home_tour_seen"))
@@ -3113,6 +3177,9 @@ def home():
                     continue
                 archived = project_is_archived(metadata)
                 status_group = get_home_project_status_group(project_folder.name, metadata)
+                error_alert = get_project_error_alert(project_folder.name, metadata)
+                if error_alert:
+                    project_error_alerts.append(error_alert)
                 projects.append(
                     {
                         "id": project_folder.name,
@@ -3127,12 +3194,30 @@ def home():
                         "status_group": status_group,
                     }
                 )
+    ai_integrations_alert = get_ai_integrations_alert()
+    home_alerts = []
+    if not ai_integrations_alert["ok"]:
+        home_alerts.append(
+            {
+                "severity": ai_integrations_alert["severity"],
+                "title": "Inteligência artificial pendente",
+                "message": f"{ai_integrations_alert['message']} Pendências: {', '.join(ai_integrations_alert['pending'])}.",
+                "href": url_for("settings_page"),
+                "action_label": "Configurar APIs",
+                "tour_target": "api-alert",
+            }
+        )
+    if project_error_alerts:
+        latest_error_alert = max(project_error_alerts, key=lambda item: item.get("sort_key", 0))
+        home_alerts.append(latest_error_alert)
+
     return render_template(
         "index.html",
         projects=projects,
         storage_status=storage_status,
         show_onboarding=show_onboarding,
-        ai_integrations_alert=get_ai_integrations_alert(),
+        ai_integrations_alert=ai_integrations_alert,
+        home_alerts=home_alerts,
     )
 
 

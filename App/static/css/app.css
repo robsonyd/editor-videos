@@ -4081,12 +4081,18 @@ body.app-shell.home-page .home-console {
   padding: 18px;
 }
 
+.home-alert-stack {
+  display: grid;
+  gap: 10px;
+  margin: -8px 0 18px;
+}
+
 .ai-setup-alert {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  margin: -8px 0 18px;
+  margin: 0;
   padding: 14px 16px;
   border: 1px solid rgba(241, 220, 148, 0.38);
   border-radius: 18px;
