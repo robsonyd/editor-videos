@@ -10,13 +10,19 @@ UNSIGNED_PKG="$DIST_DIR/EVR-Deluxe-Installer-unsigned.pkg"
 SIGNED_PKG="$DIST_DIR/EVR-Deluxe-Installer.pkg"
 NOTARY_PROFILE="${EVR_NOTARY_PROFILE:-EVR_DELUXE_NOTARY}"
 
-find_identity() {
+find_codesign_identity() {
   local label="$1"
   security find-identity -v | sed -n "s/.*\"\($label:.*\)\".*/\1/p" | head -n 1
 }
 
-APP_SIGN_IDENTITY="${EVR_APP_SIGN_IDENTITY:-$(find_identity "Developer ID Application")}"
-INSTALLER_SIGN_IDENTITY="${EVR_INSTALLER_SIGN_IDENTITY:-$(find_identity "Developer ID Installer")}"
+find_installer_certificate() {
+  security find-certificate -a -c "Developer ID Installer" -Z "$HOME/Library/Keychains/login.keychain-db" \
+    | sed -n 's/.*"alis"<blob>="\([^"]*\)".*/\1/p' \
+    | head -n 1
+}
+
+APP_SIGN_IDENTITY="${EVR_APP_SIGN_IDENTITY:-$(find_codesign_identity "Developer ID Application")}"
+INSTALLER_SIGN_IDENTITY="${EVR_INSTALLER_SIGN_IDENTITY:-$(find_installer_certificate)}"
 
 if [ -z "$APP_SIGN_IDENTITY" ]; then
   echo "Certificado Developer ID Application não encontrado no Keychain." >&2
