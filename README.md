@@ -39,38 +39,53 @@ Os modos de processamento do EVR Deluxe foram construídos inicialmente para Mac
 
 ## Configuração do ambiente
 
-Entre na pasta do app:
+Entre na raiz do projeto:
 
-cd App
+```bash
+cd ~/Projetos/editor-videos
+```
 
 Crie e ative o ambiente virtual:
 
-python -m venv venv
-source venv/bin/activate
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
 
 Instale as dependências:
 
-pip install -r requirements.txt
+```bash
+pip install -r App/requirements.txt
+```
 
-Crie o arquivo .env com base no exemplo:
+Credenciais e tokens podem ser configurados pela tela de Configurações do EVR Deluxe.
 
-cp .env.example .env
+## Atualizando o app em Aplicativos
 
-Depois edite o .env e configure sua chave:
+O app em `/Applications/EVR Deluxe.app` é um lançador local da versão em `~/Projetos/editor-videos`.
+Quando a interface ou o backend forem atualizados, rode:
 
-OPENAI_API_KEY=sua_chave_openai_aqui
-OPENAI_MODEL=gpt-5.4
+```bash
+cd ~/Projetos/editor-videos
+scripts/update_macos_app.sh
+```
+
+Esse script recria o lançador macOS apontando para `~/Projetos/editor-videos/.venv/bin/python`.
 
 ## Rodando o app
 
 Com o ambiente virtual ativo:
 
-cd App
-python app.py
+```bash
+cd ~/Projetos/editor-videos
+python App/app.py
+```
 
 Abra no navegador:
 
-http://127.0.0.1:5000
+```txt
+http://127.0.0.1:5050
+```
 
 ## Observações importantes
 
