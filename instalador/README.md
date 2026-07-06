@@ -47,7 +47,7 @@ Na raiz do projeto:
 
 ```bash
 cd ~/Projetos/editor-videos
-instalador/build_pkg.sh
+instalador/evr_deluxe_installer_pkg.sh
 ```
 
 Saída:
