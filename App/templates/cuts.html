@@ -1554,14 +1554,15 @@
     </script>
   {% else %}
 
+  {% set speaker_feature_enabled = api_settings and api_settings.huggingface_ok %}
   {% set step_2_done = transcript_text %}
   {% set step_3_done = speaker_transcript and speaker_transcript.get("speakers") %}
   {% set step_4_done = step_3_done and (metadata.get("speakers_reviewed") == "yes" or ai_request or ai_suggestions or selected_ai_cuts or cuts or processed_files) %}
-  {% set step_5_done = step_4_done and (ai_request or ai_suggestions) %}
-  {% set step_6_done = step_5_done and (selected_ai_cuts or cuts) %}
-  {% set step_7_done = step_6_done and (metadata.get("cuts_defined") == "yes" or cuts) %}
-  {% set step_8_done = step_7_done and cuts %}
-  {% set step_9_done = step_8_done and processed_files %}
+  {% set step_5_done = ai_request or (ai_suggestions and ai_suggestions.get("cuts")) %}
+  {% set step_6_done = selected_ai_cuts or cuts %}
+  {% set step_7_done = metadata.get("cuts_defined") == "yes" or cuts %}
+  {% set step_8_done = cuts %}
+  {% set step_9_done = processed_files %}
   {% set step_10_done = step_9_done and processed_files %}
 
   {% if step_10_done %}
@@ -1572,12 +1573,10 @@
     {% set current_project_step = 'section-5' %}
   {% elif step_5_done %}
     {% set current_project_step = 'section-4' %}
-  {% elif step_4_done %}
-    {% set current_project_step = 'step-ai' %}
-  {% elif step_3_done %}
+  {% elif step_3_done and not step_4_done %}
     {% set current_project_step = 'step-participants' %}
   {% elif step_2_done %}
-    {% set current_project_step = 'step-speakers' %}
+    {% set current_project_step = 'step-ai' %}
   {% else %}
     {% set current_project_step = '' %}
   {% endif %}
@@ -1588,8 +1587,8 @@
         <h3>Cortes inteligentes com I.A</h3>
       <a href="#step-start" class="{% if step_2_done %}is-done{% endif %}">Começar</a>
       <a href="#step-transcription" class="{% if step_2_done %}is-done{% endif %}">Transcrição</a>
-      <a href="#step-speakers" class="{% if step_3_done %}is-done{% endif %}">Mapeamento de participantes</a>
-      <a href="#step-participants" class="{% if step_4_done %}is-done{% endif %}">Identificação de participantes</a>
+      <a href="#step-speakers" class="{% if step_3_done %}is-done{% endif %}{% if not speaker_feature_enabled and not step_3_done %} is-disabled{% endif %}">Mapeamento de participantes</a>
+      <a href="#step-participants" class="{% if step_4_done %}is-done{% endif %}{% if not speaker_feature_enabled and not step_3_done %} is-disabled{% endif %}">Identificação de participantes</a>
       <a href="#step-ai" class="{% if step_5_done %}is-done{% endif %}">Sugerir cortes com IA</a>
       <a href="#section-4" class="{% if step_6_done %}is-done{% endif %}">Sugestões da IA</a>
       <a href="#section-5" class="{% if step_7_done %}is-done{% endif %}">Definir cortes manualmente</a>
@@ -1598,7 +1597,7 @@
       <a href="#section-8" class="{% if step_10_done %}is-done{% endif %}">Arquivos processados</a>
     </aside>
 
-    <div class="workspace-main" data-project-steps data-current-step="{{ current_project_step }}">
+    <div class="workspace-main" data-project-steps data-current-step="{{ current_project_step }}" data-after-transcription-step="step-ai" data-speaker-feature-enabled="{% if speaker_feature_enabled %}true{% else %}false{% endif %}">
   <section class="box compact-step" id="step-start">
     <div class="section-header">
       <div>
@@ -1807,6 +1806,7 @@
             <span class="step-title">Mapeamento de participantes</span>
           </h2>
         </div>
+        <p class="hint">Opcional: separa quem fala em cada trecho para refinar a análise, mas os cortes funcionam sem esta etapa.</p>
       </div>
       <span class="step-elapsed{% if not step_elapsed.get("step_3") %} is-empty{% endif %}" {% if not step_elapsed.get("step_3") %}aria-hidden="true"{% endif %}>{{ step_elapsed.get("step_3") or "" }}</span>
       {% if step_3_done %}
@@ -1814,7 +1814,13 @@
       {% endif %}
     </div>
 
-    {% if transcript_srt_text %}
+    {% if not speaker_feature_enabled %}
+      <div class="empty-state optional-feature-card">
+        <strong>Função opcional desativada</strong>
+        <span>Para mapear participantes, cadastre o token da Hugging Face em Configurações, salve e clique em Testar Hugging Face.</span>
+        <a class="secondary-button" href="{{ url_for('settings_page') }}">Configurar Hugging Face</a>
+      </div>
+    {% elif transcript_srt_text %}
       <form action="{{ url_for('identify_speakers', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="identify_speakers" data-project-id="{{ project_id }}" data-keep-scroll="true">
         <input type="hidden" name="scroll_y" value="0">
 
@@ -1855,7 +1861,7 @@
             <span class="step-title">Identificação de participantes</span>
           </h2>
         </div>
-        <p class="hint">Revise as vozes encontradas, use amostras e nomeie participantes antes da IA.</p>
+        <p class="hint">Opcional: revise as vozes encontradas, use amostras e nomeie participantes antes da IA.</p>
       </div>
       <span class="step-elapsed is-empty" aria-hidden="true"></span>
       {% if step_4_done %}
@@ -1933,8 +1939,13 @@
       </details>
     {% else %}
       <div class="empty-state">
-        <strong>Nenhum participante mapeado ainda.</strong>
-        <span>Use a etapa anterior para mapear quem fala no vídeo.</span>
+        {% if not speaker_feature_enabled %}
+          <strong>Identificação opcional indisponível</strong>
+          <span>Esta área aparece depois do mapeamento com Hugging Face validado. Você pode seguir para sugestões usando a transcrição completa.</span>
+        {% else %}
+          <strong>Nenhum participante mapeado ainda.</strong>
+          <span>Use a etapa anterior se quiser mapear quem fala no vídeo, ou siga para sugestões usando a transcrição completa.</span>
+        {% endif %}
       </div>
     {% endif %}
   </section>
@@ -1948,7 +1959,7 @@
             <span class="step-title">Sugerir cortes com IA</span>
           </h2>
         </div>
-        <p class="hint">Selecione participantes, refine o pedido e peça sugestões para a IA principal.</p>
+        <p class="hint">Refine o pedido e peça sugestões para a IA principal. Se participantes existirem, você pode filtrá-los; se não, a transcrição completa será usada.</p>
       </div>
       <span class="step-elapsed{% if not step_elapsed.get("step_5") %} is-empty{% endif %}" {% if not step_elapsed.get("step_5") %}aria-hidden="true"{% endif %}>{{ step_elapsed.get("step_5") or "" }}</span>
       {% if step_5_done %}
@@ -1975,6 +1986,11 @@
                 </span>
               </label>
             {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state optional-feature-card is-compact">
+            <strong>Análise pela transcrição completa</strong>
+            <span>Participantes são opcionais. Para filtrar falas por pessoa, configure e teste Hugging Face em Configurações e rode o mapeamento.</span>
           </div>
         {% endif %}
 
@@ -2660,21 +2676,21 @@
           <input type="radio" name="automation_target" value="step_2">
           <span>
             <strong>Até etapa 2</strong>
-            <small>Gera a transcrição e para no mapeamento de participantes.</small>
+            <small>Gera a transcrição e deixa você assumir antes das sugestões.</small>
           </span>
         </label>
-        <label class="automation-option">
-          <input type="radio" name="automation_target" value="step_3">
+        <label class="automation-option{% if not speaker_feature_enabled %} is-disabled{% endif %}">
+          <input type="radio" name="automation_target" value="step_3" {% if not speaker_feature_enabled %}disabled{% endif %}>
           <span>
             <strong>Até etapa 3</strong>
-            <small>Gera transcrição, mapeia participantes e para na identificação.</small>
+            <small>{% if speaker_feature_enabled %}Gera transcrição, mapeia participantes e para na identificação.{% else %}Opcional: exige Hugging Face cadastrado e testado.{% endif %}</small>
           </span>
         </label>
         <label class="automation-option">
           <input type="radio" name="automation_target" value="step_5">
           <span>
             <strong>Até etapa 5</strong>
-            <small>Aceita os participantes atuais, pede sugestões à IA e para na lista.</small>
+            <small>Pede sugestões à IA usando participantes se existirem; senão, usa a transcrição completa.</small>
           </span>
         </label>
         <label class="automation-option">
@@ -3085,6 +3101,7 @@
       const automationButton = document.getElementById('automation-button');
       const automationModal = document.getElementById('automation-modal');
       const automationStartButton = document.getElementById('automation-start-button');
+      const speakerFeatureEnabled = {% if speaker_feature_enabled %}true{% else %}false{% endif %};
       let activeMagicGif = '';
       const completedSteps = {
         step2: {% if step_2_done %}true{% else %}false{% endif %},
@@ -3283,23 +3300,28 @@
           }
 
           if (target === 'step_2') {
-            finishAutomation('generate_transcription', 'Automação concluída', 'Transcrição gerada. Assuma a partir do mapeamento de participantes.');
+            finishAutomation('generate_transcription', 'Automação concluída', 'Transcrição gerada. Assuma a partir das sugestões ou rode participantes opcionalmente.');
             return;
           }
 
-          if (reachesTarget(target, 3) && !completedSteps.step3) {
+          if (target === 'step_3' && !speakerFeatureEnabled) {
+            finishAutomation('generate_transcription', 'Automação concluída', 'Participantes são opcionais e exigem Hugging Face validado. Assuma a partir das sugestões.');
+            return;
+          }
+
+          if (speakerFeatureEnabled && reachesTarget(target, 3) && !completedSteps.step3) {
             setProgressState('identify_speakers', 'running', 4, 'Mapeando participantes...', 'Preparando a diarização em sequência.');
             await postForm(`/identify_speakers/${projectId}`);
             await pollJob(projectId, 'identify_speakers');
             completedSteps.step3 = true;
           }
 
-          if (target === 'step_3') {
+          if (speakerFeatureEnabled && target === 'step_3') {
             finishAutomation('identify_speakers', 'Automação concluída', 'Participantes mapeados. Assuma a partir da identificação.');
             return;
           }
 
-          if (reachesTarget(target, 5) && !completedSteps.step4) {
+          if (speakerFeatureEnabled && reachesTarget(target, 5) && completedSteps.step3 && !completedSteps.step4) {
             setProgressState('identify_speakers', 'running', 96, 'Confirmando participantes...', 'Aceitando os nomes atuais para seguir o fluxo.');
             await postForm(`/mark_speakers_reviewed/${projectId}`);
             completedSteps.step4 = true;

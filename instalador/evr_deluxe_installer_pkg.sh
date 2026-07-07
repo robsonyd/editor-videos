@@ -46,6 +46,11 @@ require_file "$PROJECT_DIR/whisper.cpp/build/bin/whisper-cli"
 require_file "$(command -v ffmpeg || true)"
 require_file "$(command -v ffprobe || true)"
 
+if [ "$(uname -m)" != "arm64" ]; then
+  echo "Este instalador atualmente empacota runtime Apple Silicon (arm64). Gere um pacote separado para Intel/Universal." >&2
+  exit 1
+fi
+
 rm -rf "$BUILD_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$SOURCE_DIR" "$SCRIPTS_DIR" "$INSTALLER_RESOURCES_DIR" "$DIST_DIR" "$VENDOR_DIR"
 
@@ -134,6 +139,10 @@ copy_ffmpeg_runtime() {
   while IFS= read -r lib_file; do
     codesign --force --sign - "$lib_file" >/dev/null 2>&1 || true
   done < <(find "$lib_dir" -maxdepth 1 -type f -name '*.dylib')
+
+  "$bin_dir/ffmpeg" -hide_banner -version >/dev/null
+  "$bin_dir/ffprobe" -hide_banner -version >/dev/null
+  "$bin_dir/ffmpeg" -hide_banner -f lavfi -i color=c=black:s=16x16:d=0.1 -f null - >/dev/null 2>&1
 }
 
 copy_macho_deps() {
@@ -295,6 +304,8 @@ PYTHON_BIN="$VENV_DIR/bin/python"
 LOG_DIR="$HOME/Library/Logs/EVR Deluxe"
 LOG_FILE="$LOG_DIR/evr-deluxe.log"
 BOOTSTRAP_LOG="$LOG_DIR/bootstrap.log"
+BOOTSTRAP_STATUS_HTML="$LOG_DIR/preparando-evr-deluxe.html"
+BOOTSTRAP_STATUS_OPENED=0
 
 export PATH="$SUPPORT_DIR/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 export PYTHONUNBUFFERED=1
@@ -308,6 +319,56 @@ show_error() {
 notify() {
   local message="$1"
   /usr/bin/osascript -e "display notification \"$message\" with title \"$APP_NAME\"" >/dev/null 2>&1 || true
+}
+
+write_bootstrap_status() {
+  local title="$1"
+  local detail="$2"
+  local redirect_url="${3:-}"
+  local refresh_tag='<meta http-equiv="refresh" content="2">'
+  if [ -n "$redirect_url" ]; then
+    refresh_tag="<meta http-equiv=\"refresh\" content=\"1; url=$redirect_url\">"
+  fi
+
+  mkdir -p "$LOG_DIR"
+  cat > "$BOOTSTRAP_STATUS_HTML" <<HTML
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  $refresh_tag
+  <title>Preparando EVR Deluxe</title>
+  <style>
+    body { margin:0; min-height:100vh; display:grid; place-items:center; background:#080908; color:#fff7df; font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif; }
+    .panel { width:min(720px, calc(100vw - 40px)); padding:34px; border:1px solid rgba(241,220,148,.28); border-radius:24px; background:radial-gradient(circle at 20% 0%, rgba(241,220,148,.18), transparent 42%), rgba(20,21,20,.94); box-shadow:0 30px 90px rgba(0,0,0,.45); }
+    .kicker { color:#58d8d1; text-transform:uppercase; letter-spacing:.12em; font-size:13px; font-weight:900; }
+    h1 { margin:12px 0 10px; font-size:38px; line-height:1.05; }
+    p { margin:0; color:rgba(255,247,223,.68); font-size:18px; line-height:1.45; }
+    .bar { height:10px; margin-top:26px; overflow:hidden; border-radius:999px; background:rgba(255,255,255,.08); }
+    .bar span { display:block; width:42%; height:100%; border-radius:inherit; background:linear-gradient(90deg,#58d8d1,#ffe18a); animation:load 1.2s ease-in-out infinite alternate; }
+    small { display:block; margin-top:18px; color:rgba(255,247,223,.42); overflow-wrap:anywhere; }
+    @keyframes load { from { transform:translateX(-35%); } to { transform:translateX(175%); } }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <span class="kicker">EVR Deluxe</span>
+    <h1>$title</h1>
+    <p>$detail</p>
+    <div class="bar" aria-hidden="true"><span></span></div>
+    <small>Log técnico: $BOOTSTRAP_LOG</small>
+  </main>
+</body>
+</html>
+HTML
+}
+
+open_bootstrap_status() {
+  if [ "$BOOTSTRAP_STATUS_OPENED" -eq 1 ]; then
+    return 0
+  fi
+  BOOTSTRAP_STATUS_OPENED=1
+  /usr/bin/open "$BOOTSTRAP_STATUS_HTML" >/dev/null 2>&1 || true
 }
 
 sync_source() {
@@ -379,6 +440,41 @@ raise SystemExit(1 if missing else 0)
 PY
 }
 
+runtime_assets_ok() {
+  local failed=0
+
+  if [ "$(uname -m)" != "arm64" ]; then
+    echo "Arquitetura não suportada neste pacote: $(uname -m). Este build é Apple Silicon (arm64)." >> "$BOOTSTRAP_LOG"
+    failed=1
+  fi
+
+  if [ ! -x "$SUPPORT_DIR/bin/ffmpeg" ]; then
+    echo "ffmpeg interno ausente ou sem permissão de execução: $SUPPORT_DIR/bin/ffmpeg" >> "$BOOTSTRAP_LOG"
+    failed=1
+  else
+    "$SUPPORT_DIR/bin/ffmpeg" -hide_banner -version >> "$BOOTSTRAP_LOG" 2>&1 || failed=1
+  fi
+
+  if [ ! -x "$SUPPORT_DIR/bin/ffprobe" ]; then
+    echo "ffprobe interno ausente ou sem permissão de execução: $SUPPORT_DIR/bin/ffprobe" >> "$BOOTSTRAP_LOG"
+    failed=1
+  else
+    "$SUPPORT_DIR/bin/ffprobe" -hide_banner -version >> "$BOOTSTRAP_LOG" 2>&1 || failed=1
+  fi
+
+  if [ ! -x "$SUPPORT_DIR/whisper.cpp/build/bin/whisper-cli" ]; then
+    echo "whisper-cli ausente ou sem permissão de execução." >> "$BOOTSTRAP_LOG"
+    failed=1
+  fi
+
+  if [ ! -f "$SUPPORT_DIR/Modelos/ggml-base.bin" ]; then
+    echo "Modelo Whisper ggml-base.bin ausente." >> "$BOOTSTRAP_LOG"
+    failed=1
+  fi
+
+  return "$failed"
+}
+
 venv_uses_supported_python() {
   if [ ! -x "$PYTHON_BIN" ]; then
     return 1
@@ -399,32 +495,40 @@ bootstrap_python() {
   fi
 
   if [ -x "$PYTHON_BIN" ] && ! venv_uses_supported_python; then
+    write_bootstrap_status "Atualizando ambiente interno" "O EVR encontrou um Python antigo/incompatível e está reconstruindo o ambiente local."
+    open_bootstrap_status
     notify "Atualizando ambiente Python interno do EVR Deluxe."
     /bin/rm -rf "$VENV_DIR" >> "$BOOTSTRAP_LOG" 2>&1
   fi
 
   if [ ! -x "$PYTHON_BIN" ]; then
+    write_bootstrap_status "Preparando ambiente Python" "Primeira abertura: criando o ambiente interno do EVR Deluxe. Isso pode levar alguns minutos."
+    open_bootstrap_status
     notify "Preparando ambiente Python. A primeira abertura pode levar alguns minutos."
     "$RUNTIME_PYTHON_BIN" -m venv "$VENV_DIR" >> "$BOOTSTRAP_LOG" 2>&1
   fi
 
   if ! dependencies_ok || requirements_changed; then
+    write_bootstrap_status "Instalando dependências" "O EVR Deluxe está instalando bibliotecas internas. Não feche esta janela; ela vai abrir o app ao terminar."
+    open_bootstrap_status
     notify "Instalando dependências do EVR Deluxe. Isso pode demorar na primeira abertura."
     "$PYTHON_BIN" -m pip install --upgrade pip >> "$BOOTSTRAP_LOG" 2>&1
     "$PYTHON_BIN" -m pip install -r "$APP_DIR/requirements.txt" >> "$BOOTSTRAP_LOG" 2>&1
 
     if ! dependencies_ok; then
+      write_bootstrap_status "Reparando dependências" "Algumas bibliotecas não ficaram corretas. O EVR está tentando reparar automaticamente."
       notify "Reparando ambiente Python do EVR Deluxe."
       "$PYTHON_BIN" -m pip install --force-reinstall --no-deps -r "$APP_DIR/requirements.txt" >> "$BOOTSTRAP_LOG" 2>&1
     fi
 
     if ! dependencies_ok; then
+      write_bootstrap_status "Reconstruindo dependências" "O EVR está reconstruindo o ambiente Python interno para corrigir a instalação."
       notify "Reconstruindo dependências do EVR Deluxe."
       "$PYTHON_BIN" -m pip install --force-reinstall -r "$APP_DIR/requirements.txt" >> "$BOOTSTRAP_LOG" 2>&1
     fi
 
     if ! dependencies_ok; then
-      show_error "Não consegui instalar todas as dependências. Veja o log em: $BOOTSTRAP_LOG"
+      show_error "Não consegui instalar todas as dependências. Reinstale o pacote mais recente. Se precisar, peça ajuda ao ChatGPT colando esta mensagem. Se continuar, envie para Robson o log técnico em: $BOOTSTRAP_LOG"
       exit 1
     fi
 
@@ -525,8 +629,17 @@ if [ ! -d "$BUNDLED_SOURCE" ]; then
 fi
 
 sync_source
+if ! runtime_assets_ok; then
+  write_bootstrap_status "Instalação incompleta" "O EVR encontrou falha em FFmpeg, FFprobe, Whisper, modelo local ou arquitetura do Mac. Reinstale o pacote mais recente. Se precisar, peça ajuda ao ChatGPT colando esta mensagem."
+  open_bootstrap_status
+  show_error "Instalação incompleta do EVR Deluxe. Reinstale o pacote mais recente. Se precisar, peça ajuda ao ChatGPT colando esta mensagem. Se continuar, envie para Robson o log técnico em: $BOOTSTRAP_LOG"
+  exit 1
+fi
 bootstrap_python
 start_server
+if [ "$BOOTSTRAP_STATUS_OPENED" -eq 1 ]; then
+  write_bootstrap_status "EVR pronto" "Ambiente preparado. Abrindo o EVR Deluxe agora." "$URL"
+fi
 monitor_browser
 LAUNCHER
 

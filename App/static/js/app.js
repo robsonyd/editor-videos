@@ -123,7 +123,7 @@
         {
           target: '[data-tour-target="api-alert"]',
           title: 'Conecte a inteligência artificial',
-          body: 'A IA principal e a Hugging Face precisam estar testadas e OK para revisar transcrições, mapear participantes e gerar cortes com IA.'
+          body: 'A IA principal precisa estar testada e OK para revisar transcrições e gerar cortes. Hugging Face é opcional e só libera o mapeamento de participantes.'
         },
         {
           target: '[data-tour-target="storage"]',
@@ -165,7 +165,7 @@
         {
           target: '[data-tour-target="settings-apis"]',
           title: 'APIs e testes',
-          body: 'Cole as chaves, salve e teste a IA principal e a Hugging Face. A Home só deixa de alertar quando os testes ficarem OK.'
+          body: 'Cole, salve e teste a IA principal. Configure Hugging Face apenas se quiser mapear participantes por voz.'
         }
       ],
       ai_cuts: [
@@ -361,8 +361,9 @@
   const projectSteps = document.querySelector('[data-project-steps]');
   if (projectSteps) {
     const sections = Array.from(projectSteps.querySelectorAll('.project-step'));
+    const afterTranscriptionStep = projectSteps.dataset.afterTranscriptionStep || 'step-ai';
     const completedJobMap = {
-      generate_transcription: 'step-speakers',
+      generate_transcription: afterTranscriptionStep,
       identify_speakers: 'step-participants',
       suggest_cuts: 'section-4',
       process_cuts: 'section-8'

@@ -1206,6 +1206,25 @@ button:disabled {
   color: var(--evr-muted);
 }
 
+.optional-feature-card {
+  gap: 10px;
+  border-style: solid;
+  border-color: rgba(242, 211, 122, 0.22);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(242, 211, 122, 0.12), transparent 38%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.optional-feature-card.is-compact {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+}
+
+.optional-feature-card .secondary-button {
+  justify-self: start;
+  margin-top: 4px;
+}
+
 .app-footer {
   width: min(var(--evr-max), calc(100vw - 32px));
   margin: 0 auto;
@@ -1604,6 +1623,14 @@ body.app-shell h3 {
   border-radius: 18px;
 }
 
+body.app-shell .optional-feature-card {
+  border-style: solid;
+  border-color: rgba(242, 211, 122, 0.22);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(242, 211, 122, 0.12), transparent 38%),
+    rgba(255, 255, 255, 0.035);
+}
+
 .box:hover,
 .project-row:hover,
 .settings-card:hover,
@@ -1792,6 +1819,13 @@ button:hover,
   border-color: rgba(241, 220, 148, 0.24);
 }
 
+.chip.is-neutral,
+.status-tag.is-neutral {
+  color: rgba(247, 243, 232, 0.72);
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 246, 215, 0.14);
+}
+
 .status-error,
 .status-tag.is-error {
   color: #ffb5ad;
@@ -1887,6 +1921,8 @@ button:hover,
   margin: 0;
   max-width: 100%;
   text-align: left;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .settings-form {
@@ -2931,6 +2967,18 @@ body.modal-open {
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.22);
 }
 
+.automation-option.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.automation-option.is-disabled:hover {
+  transform: none;
+  border-color: rgba(255, 246, 215, 0.12);
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: none;
+}
+
 .automation-option input {
   width: 18px;
   height: 18px;
@@ -3569,6 +3617,27 @@ body.app-shell .nav-link.is-strong:hover {
   filter: drop-shadow(0 0 10px rgba(241, 220, 148, 0.34));
 }
 
+.workspace-rail a.is-disabled {
+  color: rgba(247, 243, 232, 0.42);
+  border-color: rgba(255, 246, 215, 0.10);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.workspace-rail a.is-disabled::after {
+  content: "opcional";
+  min-width: auto;
+  height: auto;
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 246, 215, 0.14);
+  border-radius: 999px;
+  color: rgba(247, 243, 232, 0.48);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
 .done-check::after {
   content: "";
   position: absolute;
@@ -3940,6 +4009,14 @@ body.app-shell.settings-page .settings-status-strip .chip.is-warn {
   background: rgba(241, 220, 148, 0.13);
 }
 
+body.app-shell.settings-page .settings-status-strip .chip.is-neutral {
+  color: rgba(247, 243, 232, 0.74);
+  border-color: rgba(255, 246, 215, 0.18);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255, 246, 215, 0.08), transparent 40%),
+    rgba(255, 255, 255, 0.055);
+}
+
 body.app-shell.settings-page .settings-status-strip .chip.is-dark {
   color: #070807;
   border-color: rgba(255, 246, 215, 0.28);
@@ -4177,6 +4254,8 @@ body.app-shell.home-page .home-console {
   color: rgba(247, 243, 232, 0.60);
   font-size: 12px;
   line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ai-setup-alert em {

@@ -10,6 +10,9 @@ def build_error_title(job_type: str) -> str:
 
 
 SUPPORT_HINT = "Se isso não estiver claro ou continuar acontecendo, fale com Robson Yuri."
+CHATGPT_HINT = "Se precisar, peça ajuda ao ChatGPT colando esta mensagem de erro."
+ROBSON_HINT = "Se continuar falhando, envie para Robson: versão do macOS, modelo do Mac, extensão do arquivo, nome do arquivo, etapa que falhou e log técnico."
+FFMPEG_RECOVERY = f"Reinstale o pacote mais recente do EVR Deluxe. {CHATGPT_HINT} {ROBSON_HINT}"
 
 
 ERROR_MAP = {
@@ -19,17 +22,17 @@ ERROR_MAP = {
         ("vídeo não encontrado", "O vídeo do projeto não foi encontrado.", "Confira se o arquivo bruto ainda existe na pasta do projeto e tente novamente.", False),
         ("whisper-cli não encontrado", "O motor local de transcrição não foi encontrado.", "Reinstale o EVR Deluxe pelo pacote mais recente.", True),
         ("modelo whisper não encontrado", "O modelo local do Whisper não foi encontrado.", "Reinstale o EVR Deluxe pelo pacote mais recente.", True),
-        ("ffmpeg", "O FFmpeg falhou ao preparar o áudio.", "Tente outro arquivo ou confirme se o vídeo abre normalmente. Pode ser arquivo corrompido ou codec problemático.", True),
+        ("ffmpeg", "O FFmpeg falhou ao preparar o áudio.", f"Tente outro arquivo e confirme se o vídeo abre normalmente. Pode ser arquivo corrompido ou codec problemático. {FFMPEG_RECOVERY}", True),
         ("whisper", "O Whisper falhou ao gerar a transcrição.", "Tente novamente. Se persistir, pode ser problema no arquivo de áudio temporário ou no motor local.", True),
         ("txt/srt não gerado", "A transcrição rodou, mas os arquivos finais não apareceram.", "Verifique espaço em disco e permissão de escrita na pasta do projeto.", True),
     ],
     "identify_speakers": [
-        ("token da hugging face ausente", "Hugging Face não configurado.", "Abra Configurações, cadastre o token da Hugging Face, salve e clique em Testar Hugging Face.", False),
+        ("token da hugging face ausente", "Mapeamento opcional indisponível.", "Para usar participantes por voz, abra Configurações, cadastre o token da Hugging Face, salve e clique em Testar Hugging Face. Você também pode pular esta etapa e gerar cortes pela transcrição completa.", False),
         ("pyannote.audio não está instalado", "Dependência de participantes não foi instalada.", "Reinstale o EVR Deluxe pelo pacote mais recente e abra o app novamente para concluir dependências.", True),
-        ("não foi possível carregar o modelo de diarização", "Não foi possível carregar o modelo de participantes.", "Teste a Hugging Face em Configurações e confirme internet/acesso ao modelo Pyannote.", True),
+        ("não foi possível carregar o modelo de diarização", "Não foi possível carregar o modelo de participantes.", "Esta função é opcional. Para usá-la, teste a Hugging Face em Configurações e confirme internet/acesso ao modelo Pyannote.", True),
         ("falha ao rodar diarização", "A análise de participantes falhou no áudio.", "Tente informar o número exato ou intervalo de participantes e rode novamente.", True),
         ("nenhum participante identificado", "Nenhum participante foi identificado.", "Tente definir o número esperado de participantes e rodar a etapa novamente.", False),
-        ("pyannote falhou", "Pyannote falhou ao mapear participantes.", "Teste a Hugging Face em Configurações e tente novamente.", True),
+        ("pyannote falhou", "Pyannote falhou ao mapear participantes.", "Esta função é opcional. Teste a Hugging Face em Configurações e tente novamente, ou siga usando a transcrição completa.", True),
     ],
     "suggest_cuts": [
         ("api key ausente", "Provedor de IA não configurado.", "Abra Configurações, escolha e cadastre uma IA principal, como OpenAI, Claude, Gemini ou DeepSeek. Depois salve e clique em Testar IA principal.", False),
@@ -44,13 +47,13 @@ ERROR_MAP = {
         ("cuts.txt inexistente", "Nenhum corte salvo foi encontrado.", "Defina os cortes antes de processar.", False),
         ("nenhum corte válido", "Nenhum corte válido foi encontrado.", "Revise início, fim e nome dos cortes salvos.", False),
         ("tempo inválido", "Há um corte com tempo inválido.", "Confira se o início é menor que o fim e se o formato está correto.", False),
-        ("ffmpeg", "O FFmpeg falhou ao gerar um dos arquivos.", "Confira os tempos do corte e se o vídeo bruto ainda existe.", True),
+        ("ffmpeg", "O FFmpeg falhou ao gerar um dos arquivos.", f"Confira os tempos do corte e se o vídeo bruto ainda existe. {FFMPEG_RECOVERY}", True),
         ("arquivo de saída não gerado", "O corte rodou, mas o arquivo final não apareceu.", "Confira permissões, espaço em disco e nome do arquivo.", True),
     ],
     "split_video": [
         ("nenhum trecho manual definido", "Nenhum trecho manual foi definido.", "Adicione pelo menos um trecho ou escolha outro modo de divisão.", False),
         ("adicione pelo menos um trecho manual", "Nenhum trecho manual foi definido.", "Adicione pelo menos um trecho antes de processar.", False),
-        ("ffmpeg", "O FFmpeg falhou ao dividir o vídeo.", "Confira se o vídeo bruto ainda existe e se os tempos escolhidos são válidos.", True),
+        ("ffmpeg", "O FFmpeg falhou ao dividir o vídeo.", f"Confira se o vídeo bruto ainda existe e se os tempos escolhidos são válidos. {FFMPEG_RECOVERY}", True),
         ("arquivo de saída não gerado", "A divisão rodou, mas o arquivo final não apareceu.", "Confira espaço em disco e permissão de escrita na pasta do projeto.", True),
     ],
 }

@@ -151,6 +151,29 @@ BUNDLED_BIN_DIR = BASE_DIR / "bin"
 PATH_PREFIXES = [str(BUNDLED_BIN_DIR), "/opt/homebrew/bin", "/usr/local/bin"]
 os.environ["PATH"] = ":".join(PATH_PREFIXES) + ":" + os.environ.get("PATH", "")
 
+SUPPORTED_VIDEO_EXTENSIONS = {
+    ".mp4",
+    ".mov",
+    ".m4v",
+    ".mkv",
+    ".avi",
+    ".webm",
+    ".mpg",
+    ".mpeg",
+    ".mts",
+    ".m2ts",
+    ".3gp",
+}
+CHATGPT_HELP_TEXT = "Se precisar, peça ajuda ao ChatGPT colando esta mensagem de erro."
+ROBSON_DIAGNOSTIC_TEXT = (
+    "Se continuar falhando, envie para Robson: versão do macOS, modelo do Mac, "
+    "extensão do arquivo, nome do arquivo, etapa que falhou e log técnico."
+)
+FFMPEG_INTERNAL_ERROR_TEXT = (
+    "FFmpeg interno do EVR falhou. Reinstale o pacote mais recente do EVR Deluxe. "
+    f"{CHATGPT_HELP_TEXT} {ROBSON_DIAGNOSTIC_TEXT}"
+)
+
 DEFAULT_STORAGE_FOLDER_NAME = "VideosEditados"
 PROCESSING_FOLDER_NAME = "Estrutura de Processamento"
 PROJECT_PROCESSING_SUBFOLDERS = ["Audios", "Arquivo Video Bruto", "Dados de Processamento", "Transcrições"]
@@ -451,14 +474,12 @@ def get_ai_integrations_alert() -> dict:
     pending = []
     if not api_settings["ai_ok"]:
         pending.append(api_settings["ai_provider_label"])
-    if not api_settings["huggingface_ok"]:
-        pending.append("Hugging Face")
 
     return {
         "ok": not pending,
         "pending": pending,
-        "severity": "danger" if len(pending) == 2 else "warning",
-        "message": "Conecte as ferramentas de inteligência artificial para processar transcrições, participantes, cortes e ganchos.",
+        "severity": "warning",
+        "message": "Conecte a IA principal para revisar transcrições e gerar cortes e ganchos.",
     }
 
 
@@ -821,11 +842,37 @@ def run_processing_command(command: list[str], **kwargs):
     return completed
 
 
+def get_bundled_or_system_binary(binary_name: str) -> str:
+    bundled_path = BUNDLED_BIN_DIR / binary_name
+    if bundled_path.exists() and os.access(bundled_path, os.X_OK):
+        return str(bundled_path)
+
+    system_path = shutil.which(binary_name)
+    if system_path:
+        return system_path
+
+    raise RuntimeError(
+        f"{binary_name} não foi encontrado. {FFMPEG_INTERNAL_ERROR_TEXT}"
+    )
+
+
+def ffmpeg_binary() -> str:
+    return get_bundled_or_system_binary("ffmpeg")
+
+
+def ffprobe_binary() -> str:
+    return get_bundled_or_system_binary("ffprobe")
+
+
+def ffprobe_command(*args) -> list[str]:
+    return [ffprobe_binary(), *args]
+
+
 def ffmpeg_command(*args) -> list[str]:
     profile = get_performance_profile()
     if not profile.get("threads"):
-        return ["ffmpeg", *args]
-    return ["ffmpeg", "-threads", str(profile["threads"]), *args]
+        return [ffmpeg_binary(), *args]
+    return [ffmpeg_binary(), "-threads", str(profile["threads"]), *args]
 
 
 def ffmpeg_thread_args() -> list[str]:
@@ -894,12 +941,74 @@ def parse_ai_json_content(content: str) -> dict:
         raise
 
 
+def compact_error_text(value: str, max_length: int = 900) -> str:
+    value = re.sub(r"\s+", " ", str(value or "")).strip()
+    return value[:max_length] + ("..." if len(value) > max_length else "")
+
+
+def extract_provider_error_detail(raw_detail: str) -> str:
+    raw_detail = (raw_detail or "").strip()
+    if not raw_detail:
+        return ""
+
+    try:
+        data = json.loads(raw_detail)
+    except json.JSONDecodeError:
+        return compact_error_text(raw_detail, 500)
+
+    if isinstance(data, dict):
+        error = data.get("error")
+        if isinstance(error, dict):
+            parts = [
+                error.get("type"),
+                error.get("code"),
+                error.get("message"),
+            ]
+            return compact_error_text(" - ".join(str(part) for part in parts if part), 500)
+        if isinstance(error, str):
+            return compact_error_text(error, 500)
+        for key in ("message", "detail", "status"):
+            if data.get(key):
+                return compact_error_text(str(data.get(key)), 500)
+
+    return compact_error_text(raw_detail, 500)
+
+
+def build_ai_http_error_message(provider: str, status_code: int, raw_detail: str) -> str:
+    provider_label = get_ai_provider_label(provider)
+    detail = extract_provider_error_detail(raw_detail)
+    common_diagnostic = (
+        "Se precisar falar com Robson, envie: provedor, modelo escolhido, código HTTP, "
+        "horário do teste e log técnico. Não envie sua API key."
+    )
+    instructions = {
+        400: "A requisição foi recusada pelo provedor. Verifique se o modelo selecionado é compatível com a conta e tente testar outro modelo.",
+        401: "A chave de API parece inválida ou foi digitada no provedor errado. Gere uma nova chave, cole em Configurações, salve e teste novamente.",
+        403: "A conta não tem permissão para usar este modelo ou recurso. Verifique billing, workspace, permissões da chave e acesso ao modelo.",
+        404: "O endpoint ou modelo não foi encontrado. Troque o modelo selecionado, salve e teste novamente.",
+        429: "O provedor limitou a quantidade de requisições. Aguarde alguns minutos ou confira limite/créditos da conta.",
+    }
+    instruction = instructions.get(
+        status_code,
+        "O provedor de IA recusou a chamada. Verifique chave, modelo, billing, internet e tente novamente.",
+    )
+    message = f"{provider_label} retornou HTTP {status_code}. {instruction} {CHATGPT_HELP_TEXT} {common_diagnostic}"
+    if detail:
+        message += f" Detalhe do provedor: {detail}"
+    if get_ai_provider_option(provider).get("experimental"):
+        message += " Esta integração ainda é experimental no EVR Deluxe."
+    return compact_error_text(message, 1200)
+
+
 def build_ai_error_message(provider: str, error: Exception) -> str:
     provider_option = get_ai_provider_option(provider)
-    base = f"{provider_option['label']} retornou erro: {error}"
+    base = (
+        f"{provider_option['label']} retornou erro: {compact_error_text(str(error), 500)} "
+        f"{CHATGPT_HELP_TEXT} Se continuar, envie para Robson: provedor, modelo escolhido, horário do teste e log técnico. Não envie sua API key."
+    )
     if provider_option.get("experimental"):
         base += " Esta integração ainda é experimental no EVR Deluxe; se a chave e o modelo estiverem corretos, reporte o caso para Robson Yuri."
-    return base
+    return compact_error_text(base, 1200)
 
 
 def call_ai_json(system_prompt: str, user_prompt: str, temperature: float = 0.2, max_tokens: int = 5000) -> dict:
@@ -1006,7 +1115,7 @@ def call_ai_json(system_prompt: str, user_prompt: str, temperature: float = 0.2,
 
     except urlerror.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="ignore") if hasattr(exc, "read") else str(exc)
-        raise RuntimeError(build_ai_error_message(provider, RuntimeError(f"HTTP {exc.code}: {detail[:600]}"))) from exc
+        raise RuntimeError(build_ai_http_error_message(provider, exc.code, detail)) from exc
     except urlerror.URLError as exc:
         raise RuntimeError(build_ai_error_message(provider, exc)) from exc
     except Exception as exc:
@@ -1337,12 +1446,112 @@ def build_unique_output_name(output_dir: Path, name: str) -> str:
     return candidate
 
 
+def get_video_extension(filename: str) -> str:
+    return Path(filename or "").suffix.lower()
+
+
+def validate_supported_video_extension(filename: str):
+    extension = get_video_extension(filename)
+    if extension not in SUPPORTED_VIDEO_EXTENSIONS:
+        allowed = ", ".join(sorted(SUPPORTED_VIDEO_EXTENSIONS))
+        raise ValueError(
+            f"Formato de arquivo não suportado: {extension or 'sem extensão'}. "
+            f"O EVR aceita arquivos de vídeo comuns como {allowed}. "
+            "Se precisar, peça ajuda ao ChatGPT colando esta mensagem."
+        )
+
+
+def run_ffprobe_json(video_path: Path | str) -> dict:
+    try:
+        result = subprocess.run(
+            ffprobe_command(
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration:stream=index,codec_type,codec_name",
+                "-of",
+                "json",
+                str(video_path),
+            ),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return json.loads(result.stdout or "{}")
+    except FileNotFoundError as exc:
+        raise RuntimeError(FFMPEG_INTERNAL_ERROR_TEXT) from exc
+    except subprocess.CalledProcessError as exc:
+        raw = (exc.stderr or exc.stdout or "").strip()
+        detail = raw[:500] if raw else "ffprobe não conseguiu ler o arquivo."
+        raise RuntimeError(
+            "Não consegui validar este vídeo com o FFprobe interno do EVR. "
+            "O arquivo pode estar corrompido, incompleto ou em um codec/container incompatível. "
+            f"{CHATGPT_HELP_TEXT} {ROBSON_DIAGNOSTIC_TEXT} Detalhe técnico: {detail}"
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "O FFprobe respondeu em um formato inesperado ao validar o vídeo. "
+            f"{CHATGPT_HELP_TEXT} {ROBSON_DIAGNOSTIC_TEXT}"
+        ) from exc
+
+
+def probe_video_file(video_path: Path | str, require_audio: bool = False) -> dict:
+    probe = run_ffprobe_json(video_path)
+    streams = probe.get("streams", []) if isinstance(probe.get("streams"), list) else []
+    video_streams = [stream for stream in streams if stream.get("codec_type") == "video"]
+    audio_streams = [stream for stream in streams if stream.get("codec_type") == "audio"]
+
+    try:
+        duration = float((probe.get("format") or {}).get("duration") or 0)
+    except (TypeError, ValueError):
+        duration = 0
+
+    if not video_streams:
+        raise ValueError(
+            "Este arquivo não parece conter uma faixa de vídeo válida. "
+            "Use um arquivo de vídeo exportado normalmente, como MP4, MOV ou MKV."
+        )
+
+    if require_audio and not audio_streams:
+        raise ValueError(
+            "Este vídeo não possui faixa de áudio detectável. "
+            "Para Cortes inteligentes com I.A, o EVR precisa de áudio para transcrever."
+        )
+
+    if duration <= 0:
+        raise ValueError(
+            "Não consegui identificar a duração do vídeo. "
+            "O arquivo pode estar corrompido ou ainda em processo de cópia/exportação."
+        )
+
+    return {
+        "duration": round(duration, 2),
+        "video_codec": video_streams[0].get("codec_name", ""),
+        "audio_codec": audio_streams[0].get("codec_name", "") if audio_streams else "",
+        "has_audio": bool(audio_streams),
+        "has_video": bool(video_streams),
+    }
+
+
+def validate_uploaded_video(video_path: Path | str, original_filename: str, task_type: str) -> dict:
+    validate_supported_video_extension(original_filename)
+    return probe_video_file(video_path, require_audio=(task_type == "ai_cuts"))
+
+
+def format_upload_error(error: Exception, filename: str) -> str:
+    extension = get_video_extension(filename) or "sem extensão"
+    message = (
+        f"Não foi possível criar o projeto com '{filename}'. {error} "
+        f"Extensão: {extension}. {ROBSON_DIAGNOSTIC_TEXT}"
+    )
+    return message[:1200]
+
+
 # Retorna a duração do vídeo com ffprobe.
 def get_video_duration(video_path: Path | str):
     try:
         result = subprocess.run(
-            [
-                "ffprobe",
+            ffprobe_command(
                 "-v",
                 "error",
                 "-show_entries",
@@ -1350,7 +1559,7 @@ def get_video_duration(video_path: Path | str):
                 "-of",
                 "default=noprint_wrappers=1:nokey=1",
                 str(video_path),
-            ],
+            ),
             capture_output=True,
             text=True,
             check=True,
@@ -3369,7 +3578,7 @@ def get_project_error_alert(project_id: str, metadata: dict) -> dict | None:
 
     target_settings = any(
         term in f"{status.get('message', '')} {detail}".lower()
-        for term in ("openai", "hugging face", "api key", "token")
+        for term in ("openai", "claude", "gemini", "deepseek", "provedor de ia", "api key", "token")
     )
 
     return {
@@ -3528,6 +3737,18 @@ def home():
                 "href": url_for("settings_page"),
                 "action_label": "Configurar APIs",
                 "tour_target": "api-alert",
+            }
+        )
+    upload_error = request.args.get("upload_error", "").strip()
+    if upload_error:
+        home_alerts.append(
+            {
+                "severity": "danger",
+                "title": "Arquivo não importado",
+                "message": upload_error,
+                "href": url_for("home"),
+                "action_label": "Tentar outro arquivo",
+                "tour_target": "",
             }
         )
     if project_error_alerts:
@@ -3817,7 +4038,7 @@ def test_api_settings(provider):
         return redirect(url_for("settings_page", api_test=message))
 
     except Exception as e:
-        message = str(e)
+        message = compact_error_text(str(e), 1200)
         if provider in ("ai", "openai", "claude", "gemini", "deepseek"):
             selected_provider = normalize_ai_provider(get_api_settings().get("ai_provider"))
             provider_health = load_app_config().get("api_health", {}).get("ai_provider_health", {})
@@ -4011,9 +4232,14 @@ def upload_video():
     if file.filename == "":
         return redirect(url_for("home"))
 
+    video_name = Path(file.filename).name
+    try:
+        validate_supported_video_extension(video_name)
+    except Exception as e:
+        return redirect(url_for("home", upload_error=format_upload_error(e, video_name)))
+
     ensure_storage_root()
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    video_name = file.filename
     default_project_title = Path(video_name).stem or f"Projeto {timestamp}"
     project_title = request.form.get("project_title", "").strip() or default_project_title
     task_type = request.form.get("task_type", "ai_cuts")
@@ -4026,7 +4252,12 @@ def upload_video():
     bruto_path = get_project_subdir(project_id, "Arquivo Video Bruto") / f"{project_id}_{video_name}"
     file.save(bruto_path)
 
-    duration = get_video_duration(bruto_path)
+    try:
+        media_info = validate_uploaded_video(bruto_path, video_name, task_type)
+    except Exception as e:
+        shutil.rmtree(project_path, ignore_errors=True)
+        return redirect(url_for("home", upload_error=format_upload_error(e, video_name)))
+
     save_metadata(
         project_id,
         {
@@ -4034,7 +4265,10 @@ def upload_video():
             "project_title": project_title,
             "video_name": video_name,
             "video_path": str(bruto_path),
-            "duration": str(duration) if duration else "",
+            "duration": str(media_info.get("duration") or ""),
+            "video_codec": media_info.get("video_codec", ""),
+            "audio_codec": media_info.get("audio_codec", ""),
+            "has_audio": "yes" if media_info.get("has_audio") else "no",
             "status": "Vídeo carregado",
             "task_type": task_type,
             "transcription_generated": "no",
@@ -4119,6 +4353,7 @@ def project_detail(project_id):
         total_processing_time=total_processing_time,
         revised_transcript_exists=revised_transcript_exists,
         technical_log_text=technical_log_text,
+        api_settings=get_public_api_settings(),
         project_stage_label=get_home_project_stage_label(project_id, metadata),
         show_ai_cuts_onboarding=task_type != "video_splitter" and not bool(onboarding.get("ai_cuts_tour_seen")),
         show_video_splitter_onboarding=task_type == "video_splitter" and not bool(onboarding.get("video_splitter_tour_seen")),
@@ -4581,6 +4816,18 @@ def ai_suggestion_sample(project_id, suggestion_index, segment_type):
 
 @app.route("/identify_speakers/<project_id>", methods=["POST"])
 def identify_speakers(project_id):
+    if not get_public_api_settings().get("huggingface_ok"):
+        message = (
+            "Mapeamento de participantes é opcional e está desativado. "
+            "Para usar essa melhoria, cadastre o token da Hugging Face em Configurações, salve e clique em Testar Hugging Face."
+        )
+        if is_ajax_request():
+            return jsonify({"ok": False, "message": message}), 400
+        metadata = load_metadata(project_id)
+        metadata["status"] = message
+        save_metadata(project_id, metadata)
+        return redirect(url_for("project_detail", project_id=project_id))
+
     try:
         num_speakers = request.form.get("num_speakers", "").strip()
         min_speakers = request.form.get("min_speakers", "").strip()

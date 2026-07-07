@@ -36,7 +36,7 @@
           {{ api_settings.ai_provider_label }}: {% if api_settings.ai_ok %}OK{% else %}Pendente{% endif %}
           {% if api_settings.ai_provider_experimental %} · experimental{% endif %}
         </span>
-        <span class="chip {% if api_settings.huggingface_ok %}is-ok{% else %}is-warn{% endif %}">Hugging Face: {% if api_settings.huggingface_ok %}OK{% else %}Pendente{% endif %}</span>
+        <span class="chip {% if api_settings.huggingface_ok %}is-ok{% else %}is-neutral{% endif %}">Participantes por voz: {% if api_settings.huggingface_ok %}OK{% else %}Opcional{% endif %}</span>
       </div>
     </section>
 
@@ -255,7 +255,7 @@
               <div class="card-header">
                 <div>
                   <h3>Hugging Face / Pyannote</h3>
-                  <p class="hint">Usada para mapear participantes nos vídeos.</p>
+                  <p class="hint">Opcional. Libera o mapeamento de participantes por voz; os cortes continuam funcionando sem esta integração.</p>
                 </div>
 
                 <div class="api-card-actions">
@@ -399,13 +399,13 @@
         <div class="api-help-content" data-api-help-content="huggingface" hidden>
           <div class="api-help-summary">
             <strong>Hugging Face / Pyannote</strong>
-            <span>Necessária para mapear participantes e identificar quem fala em cada trecho do vídeo.</span>
+            <span>Opcional para mapear participantes e identificar quem fala em cada trecho do vídeo.</span>
           </div>
           <ol class="api-help-steps">
             <li>Crie ou acesse sua conta na Hugging Face.</li>
             <li>Abra Settings, depois Access Tokens, e crie um token de acesso.</li>
             <li>Confirme acesso ao modelo Pyannote usado pelo EVR Deluxe, quando a Hugging Face solicitar.</li>
-            <li>Copie o token, cole no campo Hugging Face Token, salve e clique em Testar Hugging Face.</li>
+            <li>Copie o token, cole no campo Hugging Face Token, salve e clique em Testar Hugging Face para liberar a etapa opcional de participantes.</li>
           </ol>
           <p class="small-hint">Alguns modelos da Pyannote exigem aceite de termos na página do modelo antes do token funcionar.</p>
           <div class="api-help-links">
