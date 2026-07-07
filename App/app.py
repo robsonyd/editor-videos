@@ -155,7 +155,7 @@ DEFAULT_STORAGE_FOLDER_NAME = "VideosEditados"
 PROCESSING_FOLDER_NAME = "Estrutura de Processamento"
 PROJECT_PROCESSING_SUBFOLDERS = ["Audios", "Arquivo Video Bruto", "Dados de Processamento", "Transcrições"]
 PROJECT_PUBLIC_SUBFOLDERS = ["Videos Finalizados"]
-TERMS_VERSION = "2026-07-07-oficial"
+TERMS_VERSION = "2026-07-07-oficial-2"
 TERMS_PDF_PATH = APP_DIR / "static" / "docs" / "Termos_Uso_Privacidade_EVR_Deluxe.pdf"
 
 WHISPER_CLI_PATH = BASE_DIR / "whisper.cpp" / "build" / "bin" / "whisper-cli"

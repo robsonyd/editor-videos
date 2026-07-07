@@ -584,9 +584,9 @@ write_installer_license() {
   cat > "$INSTALLER_LICENSE_PATH" <<'LICENSE'
 EVR DELUXE - TERMOS DE USO E PRIVACIDADE
 
-Antes de instalar e utilizar o EVR Deluxe, leia os Termos de Uso e Privacidade oficiais incluídos no aplicativo.
+Antes de instalar e utilizar o EVR Deluxe, leia os Termos de Uso e Política de Privacidade oficiais incluídos no aplicativo.
 
-Ao continuar a instalação, você declara que leu, compreendeu e aceita os termos aplicáveis ao uso interno do EVR Deluxe.
+Ao continuar a instalação, você declara que leu e concorda com os Termos de Uso e Política de Privacidade do EVR Deluxe. Você reconhece que o uso da ferramenta é local, pessoal e de sua exclusiva responsabilidade; que deve cumprir LGPD, direitos autorais, imagem, voz, privacidade e demais leis aplicáveis; e que Robson Yuri não coleta, não armazena, não acessa, não fornece APIs e não manipula seus conteúdos ou dados.
 
 Resumo operacional:
 - O EVR Deluxe é uma ferramenta local para processamento de vídeos, transcrições, cortes, ganchos e organização de projetos.

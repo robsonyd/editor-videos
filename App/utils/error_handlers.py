@@ -14,7 +14,8 @@ SUPPORT_HINT = "Se isso não estiver claro ou continuar acontecendo, fale com Ro
 
 ERROR_MAP = {
     "generate_transcription": [
-        ("openai api key ausente", "OpenAI não configurada.", "Abra Configurações, cadastre a chave da OpenAI, salve e clique em Testar OpenAI.", False),
+        ("api key ausente", "Provedor de IA não configurado.", "Abra Configurações, escolha e cadastre uma IA principal, como OpenAI, Claude, Gemini ou DeepSeek. Depois salve e clique em Testar IA principal.", False),
+        ("api key não configurada", "Provedor de IA não configurado.", "Abra Configurações, escolha e cadastre uma IA principal, como OpenAI, Claude, Gemini ou DeepSeek. Depois salve e clique em Testar IA principal.", False),
         ("vídeo não encontrado", "O vídeo do projeto não foi encontrado.", "Confira se o arquivo bruto ainda existe na pasta do projeto e tente novamente.", False),
         ("whisper-cli não encontrado", "O motor local de transcrição não foi encontrado.", "Reinstale o EVR Deluxe pelo pacote mais recente.", True),
         ("modelo whisper não encontrado", "O modelo local do Whisper não foi encontrado.", "Reinstale o EVR Deluxe pelo pacote mais recente.", True),
@@ -31,7 +32,8 @@ ERROR_MAP = {
         ("pyannote falhou", "Pyannote falhou ao mapear participantes.", "Teste a Hugging Face em Configurações e tente novamente.", True),
     ],
     "suggest_cuts": [
-        ("openai api key ausente", "OpenAI não configurada.", "Abra Configurações, cadastre a chave da OpenAI, salve e clique em Testar OpenAI.", False),
+        ("api key ausente", "Provedor de IA não configurado.", "Abra Configurações, escolha e cadastre uma IA principal, como OpenAI, Claude, Gemini ou DeepSeek. Depois salve e clique em Testar IA principal.", False),
+        ("api key não configurada", "Provedor de IA não configurado.", "Abra Configurações, escolha e cadastre uma IA principal, como OpenAI, Claude, Gemini ou DeepSeek. Depois salve e clique em Testar IA principal.", False),
         ("sem srt", "A transcrição com timestamps não foi encontrada.", "Gere a transcrição antes de pedir sugestões.", False),
         ("internet", "Falha de conexão ao consultar a IA.", "Verifique sua internet e tente novamente.", False),
         ("resposta inválida", "A IA respondeu em um formato inesperado.", "Tente novamente. Se persistir, reduza o pedido livre ou troque o modelo.", True),
