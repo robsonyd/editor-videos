@@ -40,7 +40,7 @@ O pacote inclui:
 - Modelo Whisper `ggml-base.bin`.
 - Build local de `whisper.cpp`.
 
-A primeira abertura ainda precisa de internet para baixar e instalar as dependências Python da `.venv`, como `pyannote.audio`, `torch`, OpenAI e Hugging Face.
+A primeira abertura ainda precisa de internet para baixar e instalar as dependências Python da `.venv`, como `pyannote.audio`, `torch`, SDK OpenAI e Hugging Face.
 
 ## Gerar novamente o pacote
 

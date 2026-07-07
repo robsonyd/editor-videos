@@ -9,6 +9,9 @@ import tempfile
 import threading
 from datetime import datetime
 from pathlib import Path
+from urllib import error as urlerror
+from urllib import parse as urlparse
+from urllib import request as urlrequest
 
 from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, url_for
@@ -31,12 +34,60 @@ ENV_OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
 ENV_HUGGINGFACE_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN") or ""
 ENV_PYANNOTE_MODEL = os.getenv("PYANNOTE_MODEL", "pyannote/speaker-diarization-community-1")
 
+AI_PROVIDER_OPTIONS = [
+    {
+        "value": "openai",
+        "label": "OpenAI",
+        "experimental": False,
+        "help_url": "https://platform.openai.com/api-keys",
+    },
+    {
+        "value": "claude",
+        "label": "Claude",
+        "experimental": True,
+        "help_url": "https://console.anthropic.com/settings/keys",
+    },
+    {
+        "value": "gemini",
+        "label": "Gemini",
+        "experimental": True,
+        "help_url": "https://aistudio.google.com/app/apikey",
+    },
+    {
+        "value": "deepseek",
+        "label": "DeepSeek",
+        "experimental": True,
+        "help_url": "https://platform.deepseek.com/api_keys",
+    },
+]
+
 OPENAI_MODEL_OPTIONS = [
     {"value": "gpt-5.4", "label": "GPT-5.4"},
     {"value": "gpt-5.4-mini", "label": "GPT-5.4 Mini"},
     {"value": "gpt-5.5", "label": "GPT-5.5"},
     {"value": "gpt-5.5-thinking", "label": "GPT-5.5 Thinking"},
 ]
+
+AI_MODEL_OPTIONS = {
+    "openai": OPENAI_MODEL_OPTIONS,
+    "claude": [
+        {"value": "claude-sonnet-4-5", "label": "Claude Sonnet 4.5"},
+        {"value": "claude-opus-4-1", "label": "Claude Opus 4.1"},
+        {"value": "claude-3-5-sonnet-latest", "label": "Claude 3.5 Sonnet Latest"},
+    ],
+    "gemini": [
+        {"value": "gemini-2.5-pro", "label": "Gemini 2.5 Pro"},
+        {"value": "gemini-2.5-flash", "label": "Gemini 2.5 Flash"},
+    ],
+    "deepseek": [
+        {"value": "deepseek-chat", "label": "DeepSeek Chat"},
+        {"value": "deepseek-reasoner", "label": "DeepSeek Reasoner"},
+    ],
+}
+DEFAULT_AI_PROVIDER = "openai"
+DEFAULT_AI_MODEL_BY_PROVIDER = {
+    provider: options[0]["value"] for provider, options in AI_MODEL_OPTIONS.items() if options
+}
 
 PYANNOTE_MODEL_OPTIONS = [
     {"value": "pyannote/speaker-diarization-community-1", "label": "Speaker Diarization Community 1"},
@@ -104,8 +155,8 @@ DEFAULT_STORAGE_FOLDER_NAME = "VideosEditados"
 PROCESSING_FOLDER_NAME = "Estrutura de Processamento"
 PROJECT_PROCESSING_SUBFOLDERS = ["Audios", "Arquivo Video Bruto", "Dados de Processamento", "Transcrições"]
 PROJECT_PUBLIC_SUBFOLDERS = ["Videos Finalizados"]
-TERMS_VERSION = "2026-07-07"
-TERMS_PDF_PATH = APP_DIR / "static" / "docs" / "termos_de_uso_evr_deluxe.pdf"
+TERMS_VERSION = "2026-07-07-oficial"
+TERMS_PDF_PATH = APP_DIR / "static" / "docs" / "Termos_Uso_Privacidade_EVR_Deluxe.pdf"
 
 WHISPER_CLI_PATH = BASE_DIR / "whisper.cpp" / "build" / "bin" / "whisper-cli"
 WHISPER_MODEL_PATH = BASE_DIR / "Modelos" / "ggml-base.bin"
@@ -181,6 +232,10 @@ def get_default_app_config() -> dict:
             "video_splitter_tour_seen": False,
         },
         "api_health": {
+            "ai_ok": False,
+            "ai_provider": DEFAULT_AI_PROVIDER,
+            "ai_checked_at": "",
+            "ai_provider_health": {},
             "openai_ok": False,
             "huggingface_ok": False,
             "openai_checked_at": "",
@@ -194,6 +249,14 @@ def get_default_app_config() -> dict:
             "terms_version": "",
         },
         "api_settings": {
+            "ai_provider": DEFAULT_AI_PROVIDER,
+            "ai_api_keys": {
+                "openai": "",
+                "claude": "",
+                "gemini": "",
+                "deepseek": "",
+            },
+            "ai_models": DEFAULT_AI_MODEL_BY_PROVIDER.copy(),
             "openai_api_key": "",
             "openai_model": ENV_OPENAI_MODEL,
             "huggingface_token": "",
@@ -221,6 +284,7 @@ def load_app_config() -> dict:
         except json.JSONDecodeError:
             pass
 
+    normalize_config_schema(config)
     return config
 
 
@@ -255,12 +319,81 @@ def mask_secret(value: str) -> str:
     return f"{value[:6]}••••••{value[-4:]}"
 
 
+def get_ai_provider_option(provider: str | None = None) -> dict:
+    provider = provider or DEFAULT_AI_PROVIDER
+    return next(
+        (item for item in AI_PROVIDER_OPTIONS if item["value"] == provider),
+        AI_PROVIDER_OPTIONS[0],
+    )
+
+
+def normalize_ai_provider(provider: str | None) -> str:
+    allowed = {item["value"] for item in AI_PROVIDER_OPTIONS}
+    return provider if provider in allowed else DEFAULT_AI_PROVIDER
+
+
+def normalize_ai_model(provider: str, model: str | None) -> str:
+    provider = normalize_ai_provider(provider)
+    allowed_models = {item["value"] for item in AI_MODEL_OPTIONS.get(provider, [])}
+    if model in allowed_models:
+        return model
+    return DEFAULT_AI_MODEL_BY_PROVIDER.get(provider, DEFAULT_AI_MODEL_BY_PROVIDER[DEFAULT_AI_PROVIDER])
+
+
+def normalize_config_schema(config: dict):
+    settings = config.setdefault("api_settings", {})
+    health = config.setdefault("api_health", {})
+
+    settings["ai_provider"] = normalize_ai_provider(settings.get("ai_provider"))
+    settings.setdefault("ai_api_keys", {})
+    settings.setdefault("ai_models", {})
+
+    legacy_openai_key = settings.get("openai_api_key") or ""
+    legacy_openai_model = settings.get("openai_model") or ENV_OPENAI_MODEL
+    if legacy_openai_key and not settings["ai_api_keys"].get("openai"):
+        settings["ai_api_keys"]["openai"] = legacy_openai_key
+    if legacy_openai_model:
+        settings["ai_models"]["openai"] = normalize_ai_model("openai", legacy_openai_model)
+
+    for provider in [item["value"] for item in AI_PROVIDER_OPTIONS]:
+        settings["ai_api_keys"].setdefault(provider, "")
+        settings["ai_models"][provider] = normalize_ai_model(provider, settings["ai_models"].get(provider))
+
+    settings["openai_api_key"] = settings["ai_api_keys"].get("openai", "")
+    settings["openai_model"] = settings["ai_models"].get("openai", ENV_OPENAI_MODEL)
+
+    health["ai_provider"] = normalize_ai_provider(health.get("ai_provider") or settings.get("ai_provider"))
+    health.setdefault("ai_ok", bool(health.get("openai_ok")) if settings["ai_provider"] == "openai" else False)
+    health.setdefault("ai_checked_at", health.get("openai_checked_at", "") if settings["ai_provider"] == "openai" else "")
+    health.setdefault("ai_provider_health", {})
+    if not isinstance(health["ai_provider_health"], dict):
+        health["ai_provider_health"] = {}
+    if health.get("openai_ok"):
+        health["ai_provider_health"].setdefault(
+            "openai",
+            {
+                "ok": bool(health.get("openai_ok")),
+                "checked_at": health.get("openai_checked_at", ""),
+                "model": settings["ai_models"].get("openai", ENV_OPENAI_MODEL),
+            },
+        )
+
+
 def get_api_settings() -> dict:
     settings = load_app_config().get("api_settings", {})
+    ai_provider = normalize_ai_provider(settings.get("ai_provider"))
+    ai_api_keys = settings.get("ai_api_keys") if isinstance(settings.get("ai_api_keys"), dict) else {}
+    ai_models = settings.get("ai_models") if isinstance(settings.get("ai_models"), dict) else {}
+    ai_model = normalize_ai_model(ai_provider, ai_models.get(ai_provider))
 
     return {
-        "openai_api_key": settings.get("openai_api_key") or "",
-        "openai_model": settings.get("openai_model") or ENV_OPENAI_MODEL,
+        "ai_provider": ai_provider,
+        "ai_api_keys": {provider["value"]: ai_api_keys.get(provider["value"], "") for provider in AI_PROVIDER_OPTIONS},
+        "ai_models": {provider["value"]: normalize_ai_model(provider["value"], ai_models.get(provider["value"])) for provider in AI_PROVIDER_OPTIONS},
+        "ai_api_key": ai_api_keys.get(ai_provider, "") or "",
+        "ai_model": ai_model,
+        "openai_api_key": ai_api_keys.get("openai") or settings.get("openai_api_key") or "",
+        "openai_model": normalize_ai_model("openai", ai_models.get("openai") or settings.get("openai_model") or ENV_OPENAI_MODEL),
         "huggingface_token": settings.get("huggingface_token") or "",
         "pyannote_model": settings.get("pyannote_model") or ENV_PYANNOTE_MODEL,
     }
@@ -269,11 +402,37 @@ def get_api_settings() -> dict:
 def get_public_api_settings() -> dict:
     settings = get_api_settings()
     health = load_app_config().get("api_health", {})
+    provider = settings.get("ai_provider", DEFAULT_AI_PROVIDER)
+    provider_option = get_ai_provider_option(provider)
+    provider_health = health.get("ai_provider_health", {})
+    if not isinstance(provider_health, dict):
+        provider_health = {}
+    current_provider_health = provider_health.get(provider, {})
+    if not isinstance(current_provider_health, dict):
+        current_provider_health = {}
+    ai_configured = bool(settings.get("ai_api_key"))
+    ai_ok = ai_configured and (
+        bool(current_provider_health.get("ok"))
+        or (provider == health.get("ai_provider") and bool(health.get("ai_ok")))
+        or (provider == "openai" and bool(health.get("openai_ok")))
+    )
     openai_configured = bool(settings.get("openai_api_key"))
     huggingface_configured = bool(settings.get("huggingface_token"))
     openai_ok = openai_configured and bool(health.get("openai_ok"))
     huggingface_ok = huggingface_configured and bool(health.get("huggingface_ok"))
     return {
+        "ai_provider": provider,
+        "ai_provider_label": provider_option["label"],
+        "ai_provider_experimental": bool(provider_option.get("experimental")),
+        "ai_provider_help_url": provider_option.get("help_url", ""),
+        "ai_configured": ai_configured,
+        "ai_ok": ai_ok,
+        "ai_checked_at": current_provider_health.get("checked_at") or health.get("ai_checked_at", ""),
+        "ai_api_key_masked": mask_secret(settings.get("ai_api_key", "")),
+        "ai_model": settings.get("ai_model", ""),
+        "ai_model_label": get_ai_model_display_label(settings.get("ai_model"), provider),
+        "ai_provider_options": AI_PROVIDER_OPTIONS,
+        "ai_model_options_by_provider": AI_MODEL_OPTIONS,
         "openai_configured": openai_configured,
         "openai_ok": openai_ok,
         "openai_checked_at": health.get("openai_checked_at", ""),
@@ -290,8 +449,8 @@ def get_public_api_settings() -> dict:
 def get_ai_integrations_alert() -> dict:
     api_settings = get_public_api_settings()
     pending = []
-    if not api_settings["openai_ok"]:
-        pending.append("OpenAI")
+    if not api_settings["ai_ok"]:
+        pending.append(api_settings["ai_provider_label"])
     if not api_settings["huggingface_ok"]:
         pending.append("Hugging Face")
 
@@ -683,17 +842,177 @@ def get_openai_client():
     return OpenAI(api_key=api_key)
 
 
+def get_ai_api_key(provider: str | None = None) -> str:
+    settings = get_api_settings()
+    provider = normalize_ai_provider(provider or settings.get("ai_provider"))
+    return settings.get("ai_api_keys", {}).get(provider, "") or ""
+
+
+def get_ai_model(provider: str | None = None) -> str:
+    settings = get_api_settings()
+    provider = normalize_ai_provider(provider or settings.get("ai_provider"))
+    return settings.get("ai_models", {}).get(provider) or normalize_ai_model(provider, None)
+
+
+def get_ai_provider_label(provider: str | None = None) -> str:
+    provider = normalize_ai_provider(provider or get_api_settings().get("ai_provider"))
+    return get_ai_provider_option(provider)["label"]
+
+
 def get_openai_model() -> str:
     return get_api_settings().get("openai_model") or ENV_OPENAI_MODEL
 
 
-def get_openai_model_display_label(model_value: str | None = None) -> str:
-    value = model_value or get_openai_model()
-    option = next((item for item in OPENAI_MODEL_OPTIONS if item["value"] == value), None)
+def get_ai_model_display_label(model_value: str | None = None, provider: str | None = None) -> str:
+    provider = normalize_ai_provider(provider or get_api_settings().get("ai_provider"))
+    value = model_value or get_ai_model(provider)
+    option = next((item for item in AI_MODEL_OPTIONS.get(provider, []) if item["value"] == value), None)
     label = option["label"] if option else value
     if label.upper().startswith("GPT-"):
         return f"ChatGPT {label[4:]}"
     return label
+
+
+def get_openai_model_display_label(model_value: str | None = None) -> str:
+    return get_ai_model_display_label(model_value or get_openai_model(), "openai")
+
+
+def parse_ai_json_content(content: str) -> dict:
+    content = (content or "").strip()
+    if not content:
+        raise RuntimeError("resposta vazia da IA")
+    if content.startswith("```"):
+        content = re.sub(r"^```(?:json)?", "", content, flags=re.IGNORECASE).strip()
+        content = re.sub(r"```$", "", content).strip()
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        start = content.find("{")
+        end = content.rfind("}")
+        if start >= 0 and end > start:
+            return json.loads(content[start : end + 1])
+        raise
+
+
+def build_ai_error_message(provider: str, error: Exception) -> str:
+    provider_option = get_ai_provider_option(provider)
+    base = f"{provider_option['label']} retornou erro: {error}"
+    if provider_option.get("experimental"):
+        base += " Esta integração ainda é experimental no EVR Deluxe; se a chave e o modelo estiverem corretos, reporte o caso para Robson Yuri."
+    return base
+
+
+def call_ai_json(system_prompt: str, user_prompt: str, temperature: float = 0.2, max_tokens: int = 5000) -> dict:
+    settings = get_api_settings()
+    provider = normalize_ai_provider(settings.get("ai_provider"))
+    api_key = get_ai_api_key(provider)
+    model = get_ai_model(provider)
+    if not api_key:
+        raise RuntimeError(f"{get_ai_provider_label(provider)} API Key ausente. Configure e teste a IA principal em Configurações.")
+
+    try:
+        if provider == "openai":
+            client = OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model=model,
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+            )
+            content = response.choices[0].message.content
+            return parse_ai_json_content(content)
+
+        if provider == "deepseek":
+            client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+            response = client.chat.completions.create(
+                model=model,
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                response_format={"type": "json_object"},
+            )
+            content = response.choices[0].message.content
+            return parse_ai_json_content(content)
+
+        if provider == "claude":
+            body = {
+                "model": model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "system": system_prompt,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": f"{user_prompt}\n\nResponda somente com JSON válido, sem markdown.",
+                    }
+                ],
+            }
+            request_payload = json.dumps(body).encode("utf-8")
+            req = urlrequest.Request(
+                "https://api.anthropic.com/v1/messages",
+                data=request_payload,
+                headers={
+                    "content-type": "application/json",
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                },
+                method="POST",
+            )
+            with urlrequest.urlopen(req, timeout=120) as response:
+                response_data = json.loads(response.read().decode("utf-8"))
+            parts = response_data.get("content", [])
+            content = "\n".join(part.get("text", "") for part in parts if isinstance(part, dict))
+            return parse_ai_json_content(content)
+
+        if provider == "gemini":
+            endpoint = (
+                f"https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{urlparse.quote(model, safe='')}:generateContent?key={urlparse.quote(api_key, safe='')}"
+            )
+            body = {
+                "system_instruction": {"parts": [{"text": system_prompt}]},
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": f"{user_prompt}\n\nResponda somente com JSON válido, sem markdown."}],
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": temperature,
+                    "responseMimeType": "application/json",
+                    "maxOutputTokens": max_tokens,
+                },
+            }
+            request_payload = json.dumps(body).encode("utf-8")
+            req = urlrequest.Request(
+                endpoint,
+                data=request_payload,
+                headers={"content-type": "application/json"},
+                method="POST",
+            )
+            with urlrequest.urlopen(req, timeout=120) as response:
+                response_data = json.loads(response.read().decode("utf-8"))
+            candidates = response_data.get("candidates", [])
+            parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+            content = "\n".join(part.get("text", "") for part in parts if isinstance(part, dict))
+            return parse_ai_json_content(content)
+
+        raise RuntimeError("Provedor de IA inválido.")
+
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore") if hasattr(exc, "read") else str(exc)
+        raise RuntimeError(build_ai_error_message(provider, RuntimeError(f"HTTP {exc.code}: {detail[:600]}"))) from exc
+    except urlerror.URLError as exc:
+        raise RuntimeError(build_ai_error_message(provider, exc)) from exc
+    except Exception as exc:
+        if isinstance(exc, RuntimeError) and str(exc).endswith("Robson Yuri."):
+            raise
+        raise RuntimeError(build_ai_error_message(provider, exc)) from exc
 
 
 def get_huggingface_token() -> str:
@@ -1254,10 +1573,9 @@ def mark_transcription_revision_failed(project_id: str, reason: str) -> dict:
 
 
 def revise_transcription_with_ai(project_id: str) -> dict:
-    client = get_openai_client()
-    if not client:
+    if not get_ai_api_key():
         raise RuntimeError(
-            "OpenAI API Key ausente. Configure e teste a OpenAI em Configurações antes de gerar a transcrição revisada."
+            f"{get_ai_provider_label()} API Key ausente. Configure e teste a IA principal em Configurações antes de gerar a transcrição revisada."
         )
 
     srt_path = get_transcript_srt_path(project_id)
@@ -1327,22 +1645,9 @@ Retorne neste formato:
 Bloco {chunk_index} de {len(chunks)}:
 {json.dumps(payload, ensure_ascii=False)}
 """
-        response = client.chat.completions.create(
-            model=get_openai_model(),
-            temperature=0.1,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-        )
+        data = call_ai_json(system_prompt, user_prompt, temperature=0.1, max_tokens=5000)
         raise_if_current_job_cancelled()
 
-        content = response.choices[0].message.content
-        if not content:
-            raise RuntimeError("resposta vazia na revisão da transcrição")
-
-        data = json.loads(content)
         revised_segments = data.get("segments")
         if not isinstance(revised_segments, list):
             raise RuntimeError("JSON de revisão sem lista segments")
@@ -2260,9 +2565,9 @@ def run_generate_transcription_job(project_id: str):
             raise FileNotFoundError("whisper-cli não encontrado")
         if not WHISPER_MODEL_PATH.exists():
             raise FileNotFoundError("modelo whisper não encontrado")
-        if not get_openai_client():
+        if not get_ai_api_key():
             raise RuntimeError(
-                "OpenAI API Key ausente. A transcrição revisada por IA é obrigatória; configure e teste a OpenAI em Configurações antes de começar."
+                f"{get_ai_provider_label()} API Key ausente. A transcrição revisada por IA é obrigatória; configure e teste a IA principal em Configurações antes de começar."
             )
 
         project_path = get_project_path(project_id)
@@ -2332,8 +2637,10 @@ def run_generate_transcription_job(project_id: str):
         metadata["transcription_revision_status"] = revision_result["status"]
         metadata["transcription_revision_applied"] = "yes" if revision_result["applied"] else "no"
         metadata["transcription_revision_glossary_count"] = str(revision_result["glossary_count"])
-        metadata["transcription_revision_model"] = get_openai_model()
-        metadata["transcription_revision_model_label"] = get_openai_model_display_label()
+        metadata["transcription_revision_provider"] = get_api_settings().get("ai_provider", DEFAULT_AI_PROVIDER)
+        metadata["transcription_revision_provider_label"] = get_ai_provider_label()
+        metadata["transcription_revision_model"] = get_ai_model()
+        metadata["transcription_revision_model_label"] = get_ai_model_display_label()
         metadata["status"] = "Transcrição revisada com IA"
         save_metadata(project_id, metadata)
         success_detail = f"TXT e SRT revisados foram gerados. Glossário utilizado: {revision_result['glossary_count']} termo(s)."
@@ -2454,9 +2761,8 @@ def run_suggest_cuts_job(project_id: str):
     project_path = get_project_path(project_id)
 
     try:
-        openai_client = get_openai_client()
-        if not openai_client:
-            raise RuntimeError("OpenAI API Key ausente. Configure a chave na tela inicial em Configurações de APIs.")
+        if not get_ai_api_key():
+            raise RuntimeError(f"{get_ai_provider_label()} API Key ausente. Configure a IA principal em Configurações de APIs.")
 
         srt_path = get_preferred_transcript_srt_path(project_id)
         if not srt_path.exists():
@@ -2578,26 +2884,10 @@ Formato desejado:
 """
 
         update_job(project_id, "suggest_cuts", build_running_status("suggest_cuts", 45, "Consultando IA..."))
-        response = openai_client.chat.completions.create(
-            model=get_openai_model(),
-            temperature=0.3,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            response_format={"type": "json_object"},
-        )
+        suggestions = call_ai_json(system_prompt, user_prompt, temperature=0.3, max_tokens=6000)
         raise_if_current_job_cancelled()
 
-        content = response.choices[0].message.content
-        if not content:
-            raise RuntimeError("resposta inválida")
-
         update_job(project_id, "suggest_cuts", build_running_status("suggest_cuts", 80, "Validando resposta..."))
-        try:
-            suggestions = json.loads(content)
-        except json.JSONDecodeError:
-            raise RuntimeError("json inválido")
 
         if not suggestions.get("cuts"):
             raise RuntimeError("nenhuma sugestão")
@@ -3326,6 +3616,8 @@ def settings_page():
         api_settings=get_public_api_settings(),
         performance_settings=get_public_performance_settings(),
         glossary_settings=get_public_glossary_settings(),
+        ai_provider_options=AI_PROVIDER_OPTIONS,
+        ai_model_options_by_provider=AI_MODEL_OPTIONS,
         openai_model_options=OPENAI_MODEL_OPTIONS,
         pyannote_model_options=PYANNOTE_MODEL_OPTIONS,
         show_settings_onboarding=not bool(config.get("onboarding", {}).get("settings_tour_seen")),
@@ -3336,29 +3628,49 @@ def settings_page():
 def save_api_settings():
     current = get_api_settings()
 
-    openai_api_key = request.form.get("openai_api_key", "").strip()
-    openai_model = request.form.get("openai_model", "").strip()
+    ai_provider = normalize_ai_provider(request.form.get("ai_provider", "").strip())
+    ai_api_key = request.form.get("ai_api_key", "").strip()
+    ai_model = normalize_ai_model(ai_provider, request.form.get("ai_model", "").strip())
     huggingface_token = request.form.get("huggingface_token", "").strip()
     pyannote_model = request.form.get("pyannote_model", "").strip()
 
-    allowed_openai_models = {item["value"] for item in OPENAI_MODEL_OPTIONS}
     allowed_pyannote_models = {item["value"] for item in PYANNOTE_MODEL_OPTIONS}
-
-    if openai_model not in allowed_openai_models:
-        openai_model = ENV_OPENAI_MODEL if ENV_OPENAI_MODEL in allowed_openai_models else OPENAI_MODEL_OPTIONS[0]["value"]
 
     if pyannote_model not in allowed_pyannote_models:
         pyannote_model = ENV_PYANNOTE_MODEL if ENV_PYANNOTE_MODEL in allowed_pyannote_models else PYANNOTE_MODEL_OPTIONS[0]["value"]
 
+    ai_api_keys = current.get("ai_api_keys", {}).copy()
+    ai_models = current.get("ai_models", {}).copy()
+    if request.form.get("clear_ai_api_key") == "1":
+        ai_api_keys[ai_provider] = ""
+    elif ai_api_key:
+        ai_api_keys[ai_provider] = ai_api_key
+    ai_models[ai_provider] = ai_model
+
     updated = {
-        "openai_api_key": "" if request.form.get("clear_openai_api_key") == "1" else (openai_api_key or current.get("openai_api_key", "")),
-        "openai_model": openai_model,
+        "ai_provider": ai_provider,
+        "ai_api_keys": ai_api_keys,
+        "ai_models": ai_models,
+        "openai_api_key": ai_api_keys.get("openai", ""),
+        "openai_model": ai_models.get("openai", normalize_ai_model("openai", None)),
         "huggingface_token": "" if request.form.get("clear_huggingface_token") == "1" else (huggingface_token or current.get("huggingface_token", "")),
         "pyannote_model": pyannote_model,
     }
 
-    health_update = {}
-    if request.form.get("clear_openai_api_key") == "1" or openai_api_key:
+    health = load_app_config().get("api_health", {})
+    provider_health = health.get("ai_provider_health", {})
+    if not isinstance(provider_health, dict):
+        provider_health = {}
+
+    health_update = {"ai_provider": ai_provider}
+    provider_changed = ai_provider != current.get("ai_provider")
+    ai_credentials_changed = request.form.get("clear_ai_api_key") == "1" or bool(ai_api_key) or provider_changed
+    if ai_credentials_changed:
+        provider_health[ai_provider] = {"ok": False, "checked_at": "", "model": ai_model}
+        health_update["ai_provider_health"] = provider_health
+        health_update["ai_ok"] = False
+        health_update["ai_checked_at"] = ""
+    if ai_provider == "openai" and ai_credentials_changed:
         health_update["openai_ok"] = False
         health_update["openai_checked_at"] = ""
     if request.form.get("clear_huggingface_token") == "1" or huggingface_token:
@@ -3438,13 +3750,46 @@ def add_glossary_term():
 @app.route("/test_api_settings/<provider>", methods=["POST"])
 def test_api_settings(provider):
     try:
-        if provider == "openai":
-            openai_client = get_openai_client()
-            if not openai_client:
-                raise RuntimeError("OpenAI API Key não configurada.")
-            openai_client.models.list()
-            message = "OpenAI conectada com sucesso."
-            save_app_config({"api_health": {"openai_ok": True, "openai_checked_at": datetime.now().isoformat(timespec="seconds")}})
+        if provider in ("ai", "openai", "claude", "gemini", "deepseek"):
+            settings = get_api_settings()
+            selected_provider = normalize_ai_provider(settings.get("ai_provider") if provider in ("ai", "openai") else provider)
+            if provider not in ("ai", "openai") and selected_provider != settings.get("ai_provider"):
+                raise RuntimeError("Salve o provedor de IA antes de testar.")
+            if not get_ai_api_key(selected_provider):
+                raise RuntimeError(f"{get_ai_provider_label(selected_provider)} API Key não configurada.")
+
+            result = call_ai_json(
+                "Você testa a conexão de uma API para o EVR Deluxe. Responda somente JSON válido.",
+                'Retorne exatamente {"ok": true}.',
+                temperature=0,
+                max_tokens=80,
+            )
+            if not result.get("ok"):
+                raise RuntimeError("A IA respondeu, mas não confirmou o teste em JSON.")
+
+            checked_at = datetime.now().isoformat(timespec="seconds")
+            health = load_app_config().get("api_health", {})
+            provider_health = health.get("ai_provider_health", {})
+            if not isinstance(provider_health, dict):
+                provider_health = {}
+            provider_health[selected_provider] = {
+                "ok": True,
+                "checked_at": checked_at,
+                "model": get_ai_model(selected_provider),
+            }
+            health_update = {
+                "ai_ok": True,
+                "ai_provider": selected_provider,
+                "ai_checked_at": checked_at,
+                "ai_provider_health": provider_health,
+            }
+            if selected_provider == "openai":
+                health_update["openai_ok"] = True
+                health_update["openai_checked_at"] = checked_at
+            message = f"{get_ai_provider_label(selected_provider)} conectada com sucesso."
+            if get_ai_provider_option(selected_provider).get("experimental"):
+                message += " Integração experimental ativa."
+            save_app_config({"api_health": health_update})
 
         elif provider == "huggingface":
             settings = get_api_settings()
@@ -3473,8 +3818,25 @@ def test_api_settings(provider):
 
     except Exception as e:
         message = str(e)
-        if provider == "openai":
-            save_app_config({"api_health": {"openai_ok": False, "openai_checked_at": ""}})
+        if provider in ("ai", "openai", "claude", "gemini", "deepseek"):
+            selected_provider = normalize_ai_provider(get_api_settings().get("ai_provider"))
+            provider_health = load_app_config().get("api_health", {}).get("ai_provider_health", {})
+            if not isinstance(provider_health, dict):
+                provider_health = {}
+            provider_health[selected_provider] = {
+                "ok": False,
+                "checked_at": "",
+                "model": get_ai_model(selected_provider),
+            }
+            health_update = {
+                "ai_ok": False,
+                "ai_checked_at": "",
+                "ai_provider_health": provider_health,
+            }
+            if selected_provider == "openai":
+                health_update["openai_ok"] = False
+                health_update["openai_checked_at"] = ""
+            save_app_config({"api_health": health_update})
         elif provider == "huggingface":
             save_app_config({"api_health": {"huggingface_ok": False, "huggingface_checked_at": ""}})
         if is_ajax_request():
@@ -3738,7 +4100,10 @@ def project_detail(project_id):
         original_transcript_srt_text=original_transcript_srt_text,
         transcript_text=transcript_text,
         transcript_srt_text=transcript_srt_text,
-        transcription_revision_model_label=metadata.get("transcription_revision_model_label") or get_openai_model_display_label(metadata.get("transcription_revision_model")),
+        transcription_revision_model_label=metadata.get("transcription_revision_model_label") or get_ai_model_display_label(
+            metadata.get("transcription_revision_model"),
+            metadata.get("transcription_revision_provider") or DEFAULT_AI_PROVIDER,
+        ),
         transcription_review_blocks=build_transcription_review_blocks(project_id),
         cuts=cuts,
         processed_files=processed_files,

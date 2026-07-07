@@ -123,7 +123,7 @@
         {
           target: '[data-tour-target="api-alert"]',
           title: 'Conecte a inteligência artificial',
-          body: 'OpenAI e Hugging Face precisam estar testadas e OK para revisar transcrições, mapear participantes e gerar cortes com IA.'
+          body: 'A IA principal e a Hugging Face precisam estar testadas e OK para revisar transcrições, mapear participantes e gerar cortes com IA.'
         },
         {
           target: '[data-tour-target="storage"]',
@@ -165,7 +165,7 @@
         {
           target: '[data-tour-target="settings-apis"]',
           title: 'APIs e testes',
-          body: 'Cole as chaves, salve e teste OpenAI e Hugging Face. A Home só deixa de alertar quando os testes ficarem OK.'
+          body: 'Cole as chaves, salve e teste a IA principal e a Hugging Face. A Home só deixa de alertar quando os testes ficarem OK.'
         }
       ],
       ai_cuts: [

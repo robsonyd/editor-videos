@@ -49,7 +49,7 @@ Depois de instalar:
 1. Abra **EVR Deluxe** em Aplicativos.
 2. A primeira abertura pode demorar alguns minutos.
 3. O app vai preparar o ambiente Python local do usuário automaticamente.
-4. Depois, configure OpenAI e Hugging Face na tela de Configurações.
+4. Depois, configure a IA principal e a Hugging Face na tela de Configurações.
 
 ## Requisitos desta versão interna
 

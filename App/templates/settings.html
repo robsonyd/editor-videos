@@ -32,7 +32,10 @@
       </div>
 
       <div class="settings-status-strip" aria-label="Status das integrações">
-        <span class="chip {% if api_settings.openai_ok %}is-ok{% else %}is-warn{% endif %}">OpenAI: {% if api_settings.openai_ok %}OK{% else %}Pendente{% endif %}</span>
+        <span class="chip {% if api_settings.ai_ok %}is-ok{% else %}is-warn{% endif %}">
+          {{ api_settings.ai_provider_label }}: {% if api_settings.ai_ok %}OK{% else %}Pendente{% endif %}
+          {% if api_settings.ai_provider_experimental %} · experimental{% endif %}
+        </span>
         <span class="chip {% if api_settings.huggingface_ok %}is-ok{% else %}is-warn{% endif %}">Hugging Face: {% if api_settings.huggingface_ok %}OK{% else %}Pendente{% endif %}</span>
       </div>
     </section>
@@ -191,39 +194,59 @@
             <div class="settings-card">
               <div class="card-header">
                 <div>
-                  <h3>OpenAI</h3>
-                  <p class="hint">Usada para gerar sugestões de cortes e ganchos.</p>
+                  <h3>IA principal</h3>
+                  <p class="hint">Usada para revisar transcrições, consultar o glossário e gerar sugestões de cortes e ganchos.</p>
                 </div>
 
                 <div class="api-card-actions">
-                  {% if api_settings.openai_configured %}
+                  {% if api_settings.ai_configured %}
                     <span class="settings-status ok">Configurada</span>
                   {% else %}
                     <span class="settings-status warn">Não configurada</span>
                   {% endif %}
-                  <button type="button" class="secondary-button api-help-button" data-api-help-open="openai">Ajuda</button>
+                  <button type="button" class="secondary-button api-help-button" data-api-help-open-current>Ajuda</button>
                 </div>
               </div>
 
-              {% if api_settings.openai_configured %}
-                <p class="small-hint">Chave atual: {{ api_settings.openai_api_key_masked }}</p>
+              {% if api_settings.ai_configured %}
+                <p class="small-hint">Chave atual: {{ api_settings.ai_api_key_masked }}</p>
               {% endif %}
 
-              <label>OpenAI API Key</label>
-              <input type="password" name="openai_api_key" placeholder="Cole uma nova chave ou deixe em branco para manter">
-
-              <label>Modelo OpenAI</label>
-              <select name="openai_model">
-                {% for model in openai_model_options %}
-                  <option value="{{ model.value }}" {% if api_settings.openai_model == model.value %}selected{% endif %}>{{ model.label }}</option>
+              <label>Provedor de IA</label>
+              <select name="ai_provider" data-ai-provider-select>
+                {% for provider in ai_provider_options %}
+                  <option value="{{ provider.value }}" {% if api_settings.ai_provider == provider.value %}selected{% endif %}>
+                    {{ provider.label }}{% if provider.experimental %} · experimental{% endif %}
+                  </option>
                 {% endfor %}
               </select>
-              <p class="small-hint">O usuário escolhe o modelo em lista, sem digitar nome técnico.</p>
+              <p class="small-hint" data-ai-provider-hint>
+                {% if api_settings.ai_provider_experimental %}
+                  Integração experimental. Se der erro com chave e modelo corretos, reporte para Robson Yuri.
+                {% else %}
+                  Integração principal estável do EVR Deluxe.
+                {% endif %}
+              </p>
 
-              {% if api_settings.openai_configured %}
+              <label>API Key da IA principal</label>
+              <input type="password" name="ai_api_key" placeholder="Cole uma nova chave ou deixe em branco para manter">
+
+              <label>Modelo da IA principal</label>
+              <select name="ai_model" data-ai-model-select>
+                {% for provider in ai_provider_options %}
+                  {% for model in ai_model_options_by_provider[provider.value] %}
+                    <option value="{{ model.value }}" data-provider="{{ provider.value }}" {% if api_settings.ai_provider == provider.value and api_settings.ai_model == model.value %}selected{% endif %}>
+                      {{ model.label }}{% if provider.experimental %} · experimental{% endif %}
+                    </option>
+                  {% endfor %}
+                {% endfor %}
+              </select>
+              <p class="small-hint">Claude, Gemini e DeepSeek estão em modo experimental e podem exigir ajustes conforme a conta/modelo.</p>
+
+              {% if api_settings.ai_configured %}
                 <label class="danger-check">
-                  <input type="checkbox" name="clear_openai_api_key" value="1">
-                  Remover chave OpenAI salva
+                  <input type="checkbox" name="clear_ai_api_key" value="1">
+                  Remover chave da IA principal salva
                 </label>
               {% endif %}
             </div>
@@ -277,8 +300,8 @@
         <div class="section-divider"></div>
 
         <div class="actions-row">
-          <form class="inline-form" action="{{ url_for('test_api_settings', provider='openai') }}" method="POST">
-            <button class="secondary-button" type="submit">Testar OpenAI</button>
+          <form class="inline-form" action="{{ url_for('test_api_settings', provider='ai') }}" method="POST">
+            <button class="secondary-button" type="submit">Testar IA principal</button>
           </form>
 
           <form class="inline-form" action="{{ url_for('test_api_settings', provider='huggingface') }}" method="POST">
@@ -321,11 +344,56 @@
           <ol class="api-help-steps">
             <li>Acesse sua conta na plataforma da OpenAI.</li>
             <li>Abra a área de API Keys e crie uma nova chave secreta.</li>
-            <li>Copie a chave, cole no campo OpenAI API Key e salve.</li>
-            <li>Clique em Testar OpenAI para confirmar se está tudo OK.</li>
+            <li>Copie a chave, selecione OpenAI como IA principal, cole no campo de API Key e salve.</li>
+            <li>Clique em Testar IA principal para confirmar se está tudo OK.</li>
           </ol>
           <p class="small-hint">A API da OpenAI é paga conforme uso e cobrança da sua própria conta OpenAI.</p>
           <a class="secondary-button api-help-link" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Abrir API Keys da OpenAI</a>
+        </div>
+
+        <div class="api-help-content" data-api-help-content="claude" hidden>
+          <div class="api-help-summary">
+            <strong>Claude</strong>
+            <span>Integração experimental para as etapas em que o EVR Deluxe conversa com a IA.</span>
+          </div>
+          <ol class="api-help-steps">
+            <li>Acesse o console da Anthropic.</li>
+            <li>Crie ou copie uma API Key ativa.</li>
+            <li>Selecione Claude como IA principal, cole a chave, escolha o modelo e salve.</li>
+            <li>Clique em Testar IA principal antes de processar projetos reais.</li>
+          </ol>
+          <p class="small-hint">A API da Anthropic/Claude é paga conforme as regras da sua conta. Se a chave e o modelo estiverem corretos e der erro, reporte para Robson Yuri.</p>
+          <a class="secondary-button api-help-link" href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Abrir API Keys da Anthropic</a>
+        </div>
+
+        <div class="api-help-content" data-api-help-content="gemini" hidden>
+          <div class="api-help-summary">
+            <strong>Gemini</strong>
+            <span>Integração experimental para revisão automática e sugestões de cortes.</span>
+          </div>
+          <ol class="api-help-steps">
+            <li>Acesse o Google AI Studio.</li>
+            <li>Crie uma API Key para Gemini.</li>
+            <li>Selecione Gemini como IA principal, cole a chave, escolha o modelo e salve.</li>
+            <li>Clique em Testar IA principal antes de usar em um episódio completo.</li>
+          </ol>
+          <p class="small-hint">Pode haver cobrança conforme a conta Google/modelo. Se a chave e o modelo estiverem corretos e der erro, reporte para Robson Yuri.</p>
+          <a class="secondary-button api-help-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Abrir API Keys do Gemini</a>
+        </div>
+
+        <div class="api-help-content" data-api-help-content="deepseek" hidden>
+          <div class="api-help-summary">
+            <strong>DeepSeek</strong>
+            <span>Integração experimental compatível com API em formato parecido com OpenAI.</span>
+          </div>
+          <ol class="api-help-steps">
+            <li>Acesse a plataforma da DeepSeek.</li>
+            <li>Crie ou copie uma API Key ativa.</li>
+            <li>Selecione DeepSeek como IA principal, cole a chave, escolha o modelo e salve.</li>
+            <li>Clique em Testar IA principal para validar antes de processar.</li>
+          </ol>
+          <p class="small-hint">A API pode ser paga conforme a sua conta DeepSeek. Se a chave e o modelo estiverem corretos e der erro, reporte para Robson Yuri.</p>
+          <a class="secondary-button api-help-link" href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener noreferrer">Abrir API Keys da DeepSeek</a>
         </div>
 
         <div class="api-help-content" data-api-help-content="huggingface" hidden>
@@ -381,6 +449,41 @@
             list.appendChild(createRow());
           }
         });
+      })();
+    </script>
+
+    <script>
+      (function () {
+        const providerSelect = document.querySelector('[data-ai-provider-select]');
+        const modelSelect = document.querySelector('[data-ai-model-select]');
+        const hint = document.querySelector('[data-ai-provider-hint]');
+        if (!providerSelect || !modelSelect) return;
+
+        const experimentalProviders = new Set(['claude', 'gemini', 'deepseek']);
+
+        function refreshAiModels() {
+          const provider = providerSelect.value || 'openai';
+          let firstVisible = null;
+          Array.from(modelSelect.options).forEach((option) => {
+            const visible = option.dataset.provider === provider;
+            option.hidden = !visible;
+            option.disabled = !visible;
+            if (visible && !firstVisible) firstVisible = option;
+          });
+
+          if (modelSelect.selectedOptions[0] && modelSelect.selectedOptions[0].dataset.provider !== provider && firstVisible) {
+            firstVisible.selected = true;
+          }
+
+          if (hint) {
+            hint.textContent = experimentalProviders.has(provider)
+              ? 'Integração experimental. Se der erro com chave e modelo corretos, reporte para Robson Yuri.'
+              : 'Integração principal estável do EVR Deluxe.';
+          }
+        }
+
+        providerSelect.addEventListener('change', refreshAiModels);
+        refreshAiModels();
       })();
     </script>
 
@@ -448,6 +551,18 @@
             title: 'Ajuda para configurar OpenAI',
             subtitle: 'Use esta chave para as etapas em que o EVR Deluxe conversa com a IA.'
           },
+          claude: {
+            title: 'Ajuda para configurar Claude',
+            subtitle: 'Integração experimental para as etapas em que o EVR Deluxe conversa com a IA.'
+          },
+          gemini: {
+            title: 'Ajuda para configurar Gemini',
+            subtitle: 'Integração experimental para revisão automática e sugestões de cortes.'
+          },
+          deepseek: {
+            title: 'Ajuda para configurar DeepSeek',
+            subtitle: 'Integração experimental para revisão automática e sugestões de cortes.'
+          },
           huggingface: {
             title: 'Ajuda para configurar Hugging Face',
             subtitle: 'Use este token para identificação de participantes com Pyannote.'
@@ -475,6 +590,13 @@
 
         document.querySelectorAll('[data-api-help-open]').forEach((button) => {
           button.addEventListener('click', () => openApiHelp(button.dataset.apiHelpOpen));
+        });
+
+        document.querySelectorAll('[data-api-help-open-current]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const providerSelect = document.querySelector('[data-ai-provider-select]');
+            openApiHelp(providerSelect ? providerSelect.value : 'openai');
+          });
         });
 
         document.querySelectorAll('[data-api-help-close]').forEach((button) => {

@@ -12,11 +12,15 @@ DIST_DIR="$INSTALLER_DIR/dist"
 VENDOR_DIR="$INSTALLER_DIR/vendor"
 ROOT_DIR="$BUILD_DIR/root"
 SCRIPTS_DIR="$BUILD_DIR/scripts"
+INSTALLER_RESOURCES_DIR="$BUILD_DIR/installer-resources"
 APP_BUNDLE="$ROOT_DIR/Applications/$APP_NAME.app"
 MACOS_DIR="$APP_BUNDLE/Contents/MacOS"
 RESOURCES_DIR="$APP_BUNDLE/Contents/Resources"
 SOURCE_DIR="$RESOURCES_DIR/source"
 PKG_PATH="$DIST_DIR/EVR-Deluxe-Installer.pkg"
+COMPONENT_PKG_PATH="$DIST_DIR/EVR-Deluxe-Component.pkg"
+DISTRIBUTION_PATH="$BUILD_DIR/Distribution.xml"
+INSTALLER_LICENSE_PATH="$INSTALLER_RESOURCES_DIR/License.txt"
 APP_SIGN_IDENTITY="${EVR_APP_SIGN_IDENTITY:-}"
 APP_ENTITLEMENTS_PATH="$BUILD_DIR/EVRDeluxe.entitlements"
 PYTHON_RUNTIME_VERSION="3.11.15"
@@ -42,7 +46,7 @@ require_file "$(command -v ffmpeg || true)"
 require_file "$(command -v ffprobe || true)"
 
 rm -rf "$BUILD_DIR"
-mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$SOURCE_DIR" "$SCRIPTS_DIR" "$DIST_DIR" "$VENDOR_DIR"
+mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$SOURCE_DIR" "$SCRIPTS_DIR" "$INSTALLER_RESOURCES_DIR" "$DIST_DIR" "$VENDOR_DIR"
 
 ensure_python_runtime() {
   if [ ! -f "$PYTHON_RUNTIME_PATH" ]; then
@@ -535,6 +539,44 @@ POSTINSTALL
   chmod +x "$SCRIPTS_DIR/postinstall"
 }
 
+write_installer_license() {
+  cat > "$INSTALLER_LICENSE_PATH" <<'LICENSE'
+EVR DELUXE - TERMOS DE USO E PRIVACIDADE
+
+Antes de instalar e utilizar o EVR Deluxe, leia os Termos de Uso e Privacidade oficiais incluídos no aplicativo.
+
+Ao continuar a instalação, você declara que leu, compreendeu e aceita os termos aplicáveis ao uso interno do EVR Deluxe.
+
+Resumo operacional:
+- O EVR Deluxe é uma ferramenta local para processamento de vídeos, transcrições, cortes, ganchos e organização de projetos.
+- O usuário é responsável pelos arquivos enviados ao aplicativo e pelas credenciais de serviços externos configuradas na ferramenta.
+- Algumas funcionalidades dependem de serviços de terceiros, como provedores de IA, Hugging Face/Pyannote, FFmpeg e modelos locais.
+- O uso de APIs externas pode gerar custos na conta do próprio usuário ou da empresa, conforme as regras de cada fornecedor.
+- O EVR Deluxe pode armazenar configurações, histórico local, logs técnicos e arquivos processados na máquina do usuário.
+- Erros em integrações experimentais devem ser reportados a Robson Yuri para análise.
+
+O documento completo em PDF estará disponível no primeiro uso do aplicativo e fica incluído nos arquivos internos do EVR Deluxe.
+LICENSE
+}
+
+write_distribution() {
+  cat > "$DISTRIBUTION_PATH" <<XML
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="1">
+  <title>$APP_NAME</title>
+  <license file="License.txt" mime-type="text/plain"/>
+  <options customize="never" require-scripts="false"/>
+  <choices-outline>
+    <line choice="default"/>
+  </choices-outline>
+  <choice id="default" title="$APP_NAME">
+    <pkg-ref id="$IDENTIFIER"/>
+  </choice>
+  <pkg-ref id="$IDENTIFIER" version="$VERSION" onConclusion="none">$(basename "$COMPONENT_PKG_PATH")</pkg-ref>
+</installer-gui-script>
+XML
+}
+
 ensure_python_runtime
 copy_clean_app
 copy_runtime_assets
@@ -543,6 +585,8 @@ patch_whisper_rpath
 write_info_plist
 write_launcher
 write_postinstall
+write_installer_license
+write_distribution
 sign_app_bundle
 
 find "$ROOT_DIR" -name ".DS_Store" -delete
@@ -559,6 +603,12 @@ pkgbuild \
   --filter '(^|/)\.DS_Store$' \
   --filter '(^|/)\.svn($|/)' \
   --filter '(^|/)CVS($|/)' \
+  "$COMPONENT_PKG_PATH"
+
+productbuild \
+  --distribution "$DISTRIBUTION_PATH" \
+  --resources "$INSTALLER_RESOURCES_DIR" \
+  --package-path "$DIST_DIR" \
   "$PKG_PATH"
 
 echo "Instalador gerado em: $PKG_PATH"
