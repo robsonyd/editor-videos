@@ -344,8 +344,38 @@ dependencies_ok() {
   fi
   "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
 import importlib.util
-required = ["flask", "openai", "huggingface_hub", "pyannote.audio", "torch"]
-raise SystemExit(0 if all(importlib.util.find_spec(name) for name in required) else 1)
+required = [
+    "annotated_types",
+    "anyio",
+    "blinker",
+    "certifi",
+    "click",
+    "distro",
+    "dotenv",
+    "flask",
+    "h11",
+    "httpcore",
+    "httpx",
+    "idna",
+    "itsdangerous",
+    "jinja2",
+    "jiter",
+    "markupsafe",
+    "openai",
+    "pydantic",
+    "pydantic_core",
+    "pyannote.audio",
+    "requests",
+    "sniffio",
+    "torch",
+    "tqdm",
+    "typing_extensions",
+    "typing_inspection",
+    "urllib3",
+    "werkzeug",
+]
+missing = [name for name in required if importlib.util.find_spec(name) is None]
+raise SystemExit(1 if missing else 0)
 PY
 }
 
@@ -382,6 +412,16 @@ bootstrap_python() {
     notify "Instalando dependências do EVR Deluxe. Isso pode demorar na primeira abertura."
     "$PYTHON_BIN" -m pip install --upgrade pip >> "$BOOTSTRAP_LOG" 2>&1
     "$PYTHON_BIN" -m pip install -r "$APP_DIR/requirements.txt" >> "$BOOTSTRAP_LOG" 2>&1
+
+    if ! dependencies_ok; then
+      notify "Reparando ambiente Python do EVR Deluxe."
+      "$PYTHON_BIN" -m pip install --force-reinstall --no-deps -r "$APP_DIR/requirements.txt" >> "$BOOTSTRAP_LOG" 2>&1
+    fi
+
+    if ! dependencies_ok; then
+      notify "Reconstruindo dependências do EVR Deluxe."
+      "$PYTHON_BIN" -m pip install --force-reinstall -r "$APP_DIR/requirements.txt" >> "$BOOTSTRAP_LOG" 2>&1
+    fi
 
     if ! dependencies_ok; then
       show_error "Não consegui instalar todas as dependências. Veja o log em: $BOOTSTRAP_LOG"
