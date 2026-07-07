@@ -19,6 +19,16 @@
     input.addEventListener('change', () => refreshChoiceState(input));
   });
 
+  const termsCheckbox = document.querySelector('[data-terms-checkbox]');
+  const termsSubmit = document.querySelector('[data-terms-submit]');
+  if (termsCheckbox && termsSubmit) {
+    const refreshTermsSubmit = () => {
+      termsSubmit.disabled = !termsCheckbox.checked;
+    };
+    termsCheckbox.addEventListener('change', refreshTermsSubmit);
+    refreshTermsSubmit();
+  }
+
   document.querySelectorAll('details.evr-collapse[data-persist-key]').forEach((detail) => {
     detail.addEventListener('toggle', () => {
       detail.classList.toggle('is-open', detail.open);

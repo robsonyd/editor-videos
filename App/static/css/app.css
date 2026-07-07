@@ -4168,6 +4168,101 @@ body.app-shell.home-page .home-console {
   white-space: nowrap;
 }
 
+.terms-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.terms-backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(88, 222, 214, 0.12), transparent 34%),
+    rgba(3, 5, 5, 0.76);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+
+.terms-dialog {
+  position: relative;
+  width: min(560px, 100%);
+  border: 1px solid rgba(241, 220, 148, 0.28);
+  border-radius: 28px;
+  padding: 28px;
+  background:
+    linear-gradient(145deg, rgba(35, 34, 29, 0.94), rgba(13, 15, 15, 0.96)),
+    rgba(12, 14, 14, 0.92);
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.48),
+    0 0 48px rgba(241, 220, 148, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.terms-dialog h2 {
+  margin: 8px 0 10px;
+  color: #fff7df;
+  font-size: 34px;
+  line-height: 1;
+}
+
+.terms-dialog p {
+  margin: 0 0 18px;
+  color: rgba(247, 243, 232, 0.62);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.terms-pdf-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  margin-bottom: 20px;
+  border: 1px solid rgba(255, 248, 232, 0.16);
+  border-radius: 999px;
+  padding: 0 16px;
+  color: #fff7df;
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 13px;
+  font-weight: 850;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.terms-pdf-link:hover {
+  transform: translateY(-1px);
+  border-color: rgba(241, 220, 148, 0.38);
+  background: rgba(241, 220, 148, 0.10);
+}
+
+.terms-accept-form {
+  display: grid;
+  gap: 16px;
+}
+
+.terms-checkbox {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: rgba(247, 243, 232, 0.78);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.terms-checkbox input {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  accent-color: #e7ca72;
+}
+
+.terms-accept-form button {
+  justify-self: end;
+  min-width: 150px;
+}
+
 body.app-shell.home-page .home-console .console-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(140px, 1fr));

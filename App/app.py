@@ -78,6 +78,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 APP_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = APP_DIR / "config.json"
 
+
+def terms_are_accepted() -> bool:
+    legal_settings = load_app_config().get("legal", {})
+    return (
+        bool(legal_settings.get("terms_accepted"))
+        and legal_settings.get("terms_version") == TERMS_VERSION
+    )
+
+
+@app.before_request
+def require_terms_acceptance():
+    allowed_endpoints = {"home", "terms_pdf", "accept_terms", "static", "brand_logo"}
+    if request.endpoint in allowed_endpoints or terms_are_accepted():
+        return None
+    return redirect(url_for("home"))
+
 # Garante que o app aberto pelo Finder encontre os binários empacotados e,
 # em ambiente de desenvolvimento, os binários instalados via Homebrew.
 BUNDLED_BIN_DIR = BASE_DIR / "bin"
@@ -88,6 +104,8 @@ DEFAULT_STORAGE_FOLDER_NAME = "VideosEditados"
 PROCESSING_FOLDER_NAME = "Estrutura de Processamento"
 PROJECT_PROCESSING_SUBFOLDERS = ["Audios", "Arquivo Video Bruto", "Dados de Processamento", "Transcrições"]
 PROJECT_PUBLIC_SUBFOLDERS = ["Videos Finalizados"]
+TERMS_VERSION = "2026-07-07"
+TERMS_PDF_PATH = APP_DIR / "static" / "docs" / "termos_de_uso_evr_deluxe.pdf"
 
 WHISPER_CLI_PATH = BASE_DIR / "whisper.cpp" / "build" / "bin" / "whisper-cli"
 WHISPER_MODEL_PATH = BASE_DIR / "Modelos" / "ggml-base.bin"
@@ -170,6 +188,11 @@ def get_default_app_config() -> dict:
         },
         "glossary": [],
         "progress_history": {},
+        "legal": {
+            "terms_accepted": False,
+            "terms_accepted_at": "",
+            "terms_version": "",
+        },
         "api_settings": {
             "openai_api_key": "",
             "openai_model": ENV_OPENAI_MODEL,
@@ -193,6 +216,8 @@ def load_app_config() -> dict:
                     config["onboarding"].update(data["onboarding"])
                 if isinstance(data.get("api_health"), dict):
                     config["api_health"].update(data["api_health"])
+                if isinstance(data.get("legal"), dict):
+                    config["legal"].update(data["legal"])
         except json.JSONDecodeError:
             pass
 
@@ -212,6 +237,9 @@ def save_app_config(config: dict):
         elif key == "api_health" and isinstance(value, dict):
             current.setdefault("api_health", {})
             current["api_health"].update(value)
+        elif key == "legal" and isinstance(value, dict):
+            current.setdefault("legal", {})
+            current["legal"].update(value)
         else:
             current[key] = value
 
@@ -3167,7 +3195,12 @@ def home():
     project_error_alerts = []
     storage_status = get_storage_status()
     config = load_app_config()
-    show_onboarding = not bool(config.get("onboarding", {}).get("home_tour_seen"))
+    legal_settings = config.get("legal", {})
+    terms_accepted = (
+        bool(legal_settings.get("terms_accepted"))
+        and legal_settings.get("terms_version") == TERMS_VERSION
+    )
+    show_onboarding = terms_accepted and not bool(config.get("onboarding", {}).get("home_tour_seen"))
     storage_root = get_storage_root()
     if storage_root.exists():
         for project_folder in sorted(storage_root.iterdir(), reverse=True):
@@ -3216,9 +3249,35 @@ def home():
         projects=projects,
         storage_status=storage_status,
         show_onboarding=show_onboarding,
+        show_terms_acceptance=not terms_accepted,
+        terms_version=TERMS_VERSION,
         ai_integrations_alert=ai_integrations_alert,
         home_alerts=home_alerts,
     )
+
+
+@app.route("/terms_of_use.pdf")
+def terms_pdf():
+    if not TERMS_PDF_PATH.exists():
+        abort(404)
+    return send_file(TERMS_PDF_PATH, mimetype="application/pdf", conditional=True)
+
+
+@app.route("/accept_terms", methods=["POST"])
+def accept_terms():
+    if request.form.get("accept_terms") != "yes":
+        return redirect(url_for("home"))
+
+    save_app_config(
+        {
+            "legal": {
+                "terms_accepted": True,
+                "terms_accepted_at": datetime.now().isoformat(timespec="seconds"),
+                "terms_version": TERMS_VERSION,
+            }
+        }
+    )
+    return redirect(url_for("home"))
 
 
 @app.route("/dismiss_onboarding", methods=["POST"])

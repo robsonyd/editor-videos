@@ -23,6 +23,32 @@
     </div>
   </header>
 
+  {% if show_terms_acceptance %}
+    <div class="terms-modal" role="dialog" aria-modal="true" aria-labelledby="terms-title">
+      <div class="terms-backdrop" aria-hidden="true"></div>
+      <section class="terms-dialog">
+        <span class="section-kicker">Primeiro uso</span>
+        <h2 id="terms-title">Termos de uso</h2>
+        <p>
+          Para usar o EVR Deluxe, leia e aceite os termos de uso. O documento está em PDF e fica salvo localmente no aplicativo.
+        </p>
+
+        <a class="terms-pdf-link" href="{{ url_for('terms_pdf') }}" target="_blank" rel="noopener noreferrer">
+          Ler termos de uso em PDF
+        </a>
+
+        <form action="{{ url_for('accept_terms') }}" method="POST" class="terms-accept-form">
+          <label class="terms-checkbox">
+            <input type="checkbox" name="accept_terms" value="yes" required data-terms-checkbox>
+            <span>Li e aceito todos os termos de uso do EVR Deluxe.</span>
+          </label>
+
+          <button type="submit" data-terms-submit disabled>Continuar</button>
+        </form>
+      </section>
+    </div>
+  {% endif %}
+
   <main class="app-main">
     {% if home_alerts %}
       <div class="home-alert-stack">
