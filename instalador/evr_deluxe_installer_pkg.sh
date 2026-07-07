@@ -22,6 +22,7 @@ COMPONENT_PKG_PATH="$DIST_DIR/EVR-Deluxe-Component.pkg"
 DISTRIBUTION_PATH="$BUILD_DIR/Distribution.xml"
 INSTALLER_LICENSE_PATH="$INSTALLER_RESOURCES_DIR/License.txt"
 APP_SIGN_IDENTITY="${EVR_APP_SIGN_IDENTITY:-}"
+INSTALLER_SIGN_IDENTITY="${EVR_INSTALLER_SIGN_IDENTITY:-}"
 APP_ENTITLEMENTS_PATH="$BUILD_DIR/EVRDeluxe.entitlements"
 PYTHON_RUNTIME_VERSION="3.11.15"
 PYTHON_RUNTIME_BUILD="20260623"
@@ -605,11 +606,17 @@ pkgbuild \
   --filter '(^|/)CVS($|/)' \
   "$COMPONENT_PKG_PATH"
 
-productbuild \
-  --distribution "$DISTRIBUTION_PATH" \
-  --resources "$INSTALLER_RESOURCES_DIR" \
-  --package-path "$DIST_DIR" \
-  "$PKG_PATH"
+productbuild_args=(
+  --distribution "$DISTRIBUTION_PATH"
+  --resources "$INSTALLER_RESOURCES_DIR"
+  --package-path "$DIST_DIR"
+)
+
+if [ -n "$INSTALLER_SIGN_IDENTITY" ]; then
+  productbuild_args+=(--sign "$INSTALLER_SIGN_IDENTITY" --timestamp)
+fi
+
+productbuild "${productbuild_args[@]}" "$PKG_PATH"
 
 echo "Instalador gerado em: $PKG_PATH"
 du -sh "$PKG_PATH"
