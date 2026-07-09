@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 export COPYFILE_DISABLE=1
+export COPY_EXTENDED_ATTRIBUTES_DISABLE=1
 
 APP_NAME="EVR Deluxe"
 IDENTIFIER="com.robsonyuri.evrdeluxe"
