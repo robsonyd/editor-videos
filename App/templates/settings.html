@@ -56,7 +56,7 @@
       </div>
     {% endif %}
 
-    <section class="box settings-panel" data-tour-target="settings-performance">
+    <section class="box settings-panel" data-settings-section="performance" data-tour-target="settings-performance">
       <aside class="settings-aside">
         <span class="section-kicker">Desempenho</span>
         <h2>Modo de processamento</h2>
@@ -115,7 +115,7 @@
       </div>
     </section>
 
-    <section class="box settings-panel" data-tour-target="settings-glossary">
+    <section class="box settings-panel" data-settings-section="glossary" data-tour-target="settings-glossary">
       <aside class="settings-aside">
         <span class="section-kicker">Glossário</span>
         <h2>Correções automáticas</h2>
@@ -167,7 +167,7 @@
       </div>
     </section>
 
-    <section class="box settings-panel" data-tour-target="settings-apis">
+    <section class="box settings-panel" data-settings-section="apis" data-tour-target="settings-apis">
       <aside class="settings-aside">
         <span class="section-kicker">APIs</span>
         <h2>Chaves e modelos</h2>
@@ -177,19 +177,13 @@
           {% if request.args.get('saved') %}
             <p class="status-ok">Configurações salvas.</p>
           {% endif %}
-
-          {% if request.args.get('api_test') %}
-            <p class="status-ok">{{ request.args.get('api_test') }}</p>
-          {% endif %}
-
-          {% if request.args.get('api_error') %}
-            <p class="status-error">{{ request.args.get('api_error') }}</p>
-          {% endif %}
         </div>
       </aside>
 
       <div class="settings-main">
         <form class="settings-form" action="{{ url_for('save_api_settings') }}" method="POST">
+          <input type="hidden" name="clear_ai_api_key" value="0" data-clear-ai-api-key>
+          <input type="hidden" name="clear_huggingface_token" value="0" data-clear-huggingface-token>
           <div class="settings-grid">
             <div class="settings-card">
               <div class="card-header">
@@ -244,10 +238,9 @@
               <p class="small-hint">Claude, Gemini e DeepSeek estão em modo experimental e podem exigir ajustes conforme a conta/modelo.</p>
 
               {% if api_settings.ai_configured %}
-                <label class="danger-check">
-                  <input type="checkbox" name="clear_ai_api_key" value="1">
-                  Remover chave da IA principal salva
-                </label>
+                <button type="button" class="secondary-button danger-action" data-confirm-remove-secret="ai">
+                  Remover chave da IA principal
+                </button>
               {% endif %}
             </div>
 
@@ -284,10 +277,9 @@
               <p class="small-hint">A lista pode receber novos modelos compatíveis nas próximas integrações.</p>
 
               {% if api_settings.huggingface_configured %}
-                <label class="danger-check">
-                  <input type="checkbox" name="clear_huggingface_token" value="1">
-                  Remover token Hugging Face salvo
-                </label>
+                <button type="button" class="secondary-button danger-action" data-confirm-remove-secret="huggingface">
+                  Remover token Hugging Face
+                </button>
               {% endif %}
             </div>
           </div>
@@ -415,6 +407,79 @@
         </div>
       </section>
     </div>
+
+    <div class="automation-modal api-test-modal" id="api-test-modal" hidden aria-hidden="true" data-api-auto-tests="{{ request.args.get('test_after_save', '') }}">
+      <div class="automation-backdrop" data-api-test-close></div>
+      <section class="automation-dialog api-test-dialog" role="dialog" aria-modal="true" aria-labelledby="api-test-title">
+        <button type="button" class="automation-close" data-api-test-close aria-label="Fechar">×</button>
+        <div class="automation-head">
+          <span class="section-kicker">Validação</span>
+          <h3 id="api-test-title">Testando chave de API...</h3>
+          <p class="hint" id="api-test-message">Estamos verificando se a chave foi salva corretamente e se a IA pode ser usada.</p>
+        </div>
+
+        <div class="api-test-result" id="api-test-result" aria-live="polite">
+          <span class="api-test-spinner" aria-hidden="true"></span>
+          <strong>Teste em andamento</strong>
+          <small>Aguarde alguns segundos.</small>
+        </div>
+
+        <div class="actions-row api-test-actions">
+          <button type="button" class="secondary-button" data-api-test-edit>Editar chave</button>
+          <button type="button" class="secondary-button" data-api-test-retry>Tentar novamente</button>
+          <button type="button" class="secondary-button" data-api-test-manual>Confirmar manualmente</button>
+          <button type="button" data-api-test-close>Continuar</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="automation-modal secret-remove-modal" id="secret-remove-modal" hidden aria-hidden="true">
+      <div class="automation-backdrop" data-secret-remove-close></div>
+      <section class="automation-dialog secret-remove-dialog" role="dialog" aria-modal="true" aria-labelledby="secret-remove-title">
+        <button type="button" class="automation-close" data-secret-remove-close aria-label="Fechar">×</button>
+        <div class="automation-head">
+          <span class="section-kicker">Confirmação</span>
+          <h3 id="secret-remove-title">Remover chave?</h3>
+          <p class="hint" id="secret-remove-message">Ao remover a chave, recursos que dependem dela ficarão indisponíveis até uma nova configuração.</p>
+        </div>
+
+        <div class="actions-row secret-remove-actions">
+          <button type="button" class="secondary-button" data-secret-remove-close>Cancelar</button>
+          <button type="button" class="delete-button" data-secret-remove-confirm>Remover chave</button>
+        </div>
+      </section>
+    </div>
+
+    {% if request.args.get('api_error') or request.args.get('api_test') %}
+      <div class="automation-modal settings-feedback-modal" id="settings-feedback-modal" data-settings-feedback-modal hidden aria-hidden="true">
+        <div class="automation-backdrop" data-settings-feedback-close></div>
+        <section class="automation-dialog settings-feedback-dialog" role="dialog" aria-modal="true" aria-labelledby="settings-feedback-title">
+          <button type="button" class="automation-close" data-settings-feedback-close aria-label="Fechar">×</button>
+          <div class="automation-head">
+            <span class="section-kicker">{% if request.args.get('api_error') %}Atenção{% else %}Validação{% endif %}</span>
+            <h3 id="settings-feedback-title">
+              {% if request.args.get('api_error') %}
+                Não foi possível validar a configuração
+              {% else %}
+                Configuração validada
+              {% endif %}
+            </h3>
+          </div>
+
+          <div class="api-test-result {% if request.args.get('api_error') %}is-error{% else %}is-success{% endif %}">
+            <strong>{% if request.args.get('api_error') %}Revise esta configuração{% else %}Tudo certo{% endif %}</strong>
+            <small>{{ request.args.get('api_error') or request.args.get('api_test') }}</small>
+          </div>
+
+          <div class="actions-row settings-feedback-actions">
+            {% if request.args.get('api_error') %}
+              <button type="button" class="secondary-button" data-api-help-open-current>Ajuda</button>
+            {% endif %}
+            <button type="button" data-settings-feedback-close>Entendi</button>
+          </div>
+        </section>
+      </div>
+    {% endif %}
 
     <script type="application/json" id="performance-details-data">{{ performance_settings.options|tojson }}</script>
 
@@ -605,6 +670,218 @@
 
         document.addEventListener('keydown', (event) => {
           if (event.key === 'Escape' && !modal.hidden) closeApiHelp();
+        });
+      })();
+    </script>
+
+    <script>
+      (function () {
+        const modal = document.querySelector('[data-settings-feedback-modal]');
+        if (!modal) return;
+
+        function openFeedbackModal() {
+          modal.hidden = false;
+          modal.setAttribute('aria-hidden', 'false');
+          document.body.classList.add('modal-open');
+          const primaryButton = modal.querySelector('[data-settings-feedback-close]');
+          primaryButton?.focus();
+        }
+
+        function closeFeedbackModal() {
+          modal.hidden = true;
+          modal.setAttribute('aria-hidden', 'true');
+          document.body.classList.remove('modal-open');
+        }
+
+        document.querySelectorAll('[data-settings-feedback-close]').forEach((button) => {
+          button.addEventListener('click', closeFeedbackModal);
+        });
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && !modal.hidden) closeFeedbackModal();
+        });
+
+        window.setTimeout(openFeedbackModal, 120);
+      })();
+    </script>
+
+    <script>
+      (function () {
+        const form = document.querySelector('form[action="{{ url_for("save_api_settings") }}"]');
+        const removeModal = document.getElementById('secret-remove-modal');
+        const removeTitle = document.getElementById('secret-remove-title');
+        const removeMessage = document.getElementById('secret-remove-message');
+        const removeConfirm = document.querySelector('[data-secret-remove-confirm]');
+        const clearAi = document.querySelector('[data-clear-ai-api-key]');
+        const clearHf = document.querySelector('[data-clear-huggingface-token]');
+        let removeTarget = '';
+
+        const removeCopy = {
+          ai: {
+            title: 'Remover chave da IA principal?',
+            message: 'Ao remover esta chave, Cortes inteligentes com I.A ficam bloqueados até que uma nova IA seja configurada e testada.',
+            button: 'Remover chave'
+          },
+          huggingface: {
+            title: 'Remover token Hugging Face?',
+            message: 'Ao remover este token, o mapeamento opcional de participantes por voz fica indisponível até uma nova configuração.',
+            button: 'Remover token'
+          }
+        };
+
+        function openRemoveModal(target) {
+          const copy = removeCopy[target];
+          if (!copy || !removeModal) return;
+          removeTarget = target;
+          if (removeTitle) removeTitle.textContent = copy.title;
+          if (removeMessage) removeMessage.textContent = copy.message;
+          if (removeConfirm) removeConfirm.textContent = copy.button;
+          removeModal.hidden = false;
+          removeModal.setAttribute('aria-hidden', 'false');
+          document.body.classList.add('modal-open');
+          removeConfirm?.focus();
+        }
+
+        function closeRemoveModal() {
+          if (!removeModal) return;
+          removeModal.hidden = true;
+          removeModal.setAttribute('aria-hidden', 'true');
+          document.body.classList.remove('modal-open');
+          removeTarget = '';
+        }
+
+        document.querySelectorAll('[data-confirm-remove-secret]').forEach((button) => {
+          button.addEventListener('click', () => openRemoveModal(button.dataset.confirmRemoveSecret));
+        });
+
+        document.querySelectorAll('[data-secret-remove-close]').forEach((button) => {
+          button.addEventListener('click', closeRemoveModal);
+        });
+
+        removeConfirm?.addEventListener('click', () => {
+          if (!form) return;
+          if (clearAi) clearAi.value = removeTarget === 'ai' ? '1' : '0';
+          if (clearHf) clearHf.value = removeTarget === 'huggingface' ? '1' : '0';
+          form.submit();
+        });
+
+        const testModal = document.getElementById('api-test-modal');
+        const testTitle = document.getElementById('api-test-title');
+        const testMessage = document.getElementById('api-test-message');
+        const testResult = document.getElementById('api-test-result');
+        const retryButton = document.querySelector('[data-api-test-retry]');
+        const manualButton = document.querySelector('[data-api-test-manual]');
+        const editButton = document.querySelector('[data-api-test-edit]');
+        let activeTests = [];
+        let activeTestIndex = 0;
+        let shouldReloadAfterTest = false;
+
+        function setTestState(state, title, message, detail) {
+          if (!testTitle || !testMessage || !testResult) return;
+          testTitle.textContent = title;
+          testMessage.textContent = message;
+          testResult.className = `api-test-result is-${state}`;
+          const spinner = state === 'testing' ? '<span class="api-test-spinner" aria-hidden="true"></span>' : '';
+          testResult.innerHTML = `${spinner}<strong>${detail || title}</strong><small>${message}</small>`;
+          if (retryButton) retryButton.hidden = state === 'testing' || state === 'success';
+          if (manualButton) manualButton.hidden = state === 'testing' || state === 'success';
+          if (editButton) editButton.hidden = state === 'testing' || state === 'success';
+        }
+
+        function openTestModal() {
+          if (!testModal) return;
+          testModal.hidden = false;
+          testModal.setAttribute('aria-hidden', 'false');
+          document.body.classList.add('modal-open');
+        }
+
+        function closeTestModal() {
+          if (!testModal) return;
+          testModal.hidden = true;
+          testModal.setAttribute('aria-hidden', 'true');
+          document.body.classList.remove('modal-open');
+          if (shouldReloadAfterTest) {
+            window.location.href = '{{ url_for("settings_page") }}';
+          }
+        }
+
+        function testLabel(provider) {
+          return provider === 'huggingface' ? 'Hugging Face' : 'IA principal';
+        }
+
+        async function postProvider(url) {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !data.ok) {
+            throw new Error(data.message || 'Não foi possível validar esta chave.');
+          }
+          return data;
+        }
+
+        async function runActiveTest() {
+          const provider = activeTests[activeTestIndex] || 'ai';
+          openTestModal();
+          setTestState(
+            'testing',
+            `Testando ${testLabel(provider)}...`,
+            'Estamos verificando se a chave foi salva corretamente e se pode ser usada.',
+            'Teste em andamento'
+          );
+
+          try {
+            const data = await postProvider(`{{ url_for("test_api_settings", provider="__provider__") }}`.replace('__provider__', provider));
+            const hasNext = activeTestIndex < activeTests.length - 1;
+            if (hasNext) {
+              activeTestIndex += 1;
+              setTestState('success', `${testLabel(provider)} validada.`, data.message || 'Conexão OK.', 'Validação concluída');
+              window.setTimeout(runActiveTest, 650);
+              return;
+            }
+            shouldReloadAfterTest = true;
+            setTestState('success', 'Chave validada com sucesso.', data.message || 'A IA já está pronta para ser usada nas tarefas compatíveis.', 'Tudo pronto');
+          } catch (error) {
+            setTestState(
+              'error',
+              `Não foi possível validar ${testLabel(provider)}.`,
+              error.message || 'Verifique se a chave está correta, ativa e com permissão para usar o serviço.',
+              'Falha na validação'
+            );
+          }
+        }
+
+        retryButton?.addEventListener('click', runActiveTest);
+        manualButton?.addEventListener('click', async () => {
+          const provider = activeTests[activeTestIndex] || 'ai';
+          setTestState('testing', 'Confirmando manualmente...', 'Salvando a confirmação no próprio aplicativo.', 'Aguarde');
+          try {
+            const data = await postProvider(`{{ url_for("confirm_api_settings", provider="__provider__") }}`.replace('__provider__', provider));
+            shouldReloadAfterTest = true;
+            setTestState('success', 'Configuração confirmada manualmente.', data.message || 'A configuração foi marcada como pronta.', 'Confirmação salva');
+          } catch (error) {
+            setTestState('error', 'Não foi possível confirmar manualmente.', error.message || 'Revise a configuração e tente novamente.', 'Falha na confirmação');
+          }
+        });
+        editButton?.addEventListener('click', closeTestModal);
+        document.querySelectorAll('[data-api-test-close]').forEach((button) => button.addEventListener('click', closeTestModal));
+
+        const autoTests = (testModal?.dataset.apiAutoTests || '')
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
+        if (autoTests.length) {
+          activeTests = autoTests;
+          activeTestIndex = 0;
+          window.setTimeout(runActiveTest, 250);
+        }
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            closeRemoveModal();
+            closeTestModal();
+          }
         });
       })();
     </script>

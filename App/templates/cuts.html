@@ -102,6 +102,58 @@
       gap: 12px;
       margin: 18px 0 22px;
     }
+    #splitter-main form[data-progress-job="true"] {
+      display: flex;
+      flex-direction: column;
+    }
+    #splitter-main .splitter-mode-panel {
+      order: 1;
+      margin-top: 0;
+    }
+    #splitter-main .splitter-studio {
+      order: 2;
+    }
+    .splitter-footer-actions {
+      order: 3;
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .splitter-footer-actions button {
+      min-width: 170px;
+      margin: 0;
+      white-space: nowrap;
+    }
+    .splitter-output-actions {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 10px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255, 246, 215, 0.10);
+    }
+    .splitter-output-actions form {
+      margin: 0;
+    }
+    .splitter-output-actions button {
+      min-width: 190px;
+      margin: 0;
+      white-space: nowrap;
+    }
+    .splitter-studio[data-active-mode="fixed_duration"] .splitter-selection-bar,
+    .splitter-studio[data-active-mode="by_parts"] .splitter-selection-bar,
+    .splitter-studio[data-active-mode="social_preset"] .splitter-selection-bar,
+    .splitter-studio[data-active-mode="fixed_duration"] .splitter-timeline-panel,
+    .splitter-studio[data-active-mode="by_parts"] .splitter-timeline-panel,
+    .splitter-studio[data-active-mode="social_preset"] .splitter-timeline-panel {
+      display: none;
+    }
+    .splitter-preview-layout.is-player-only {
+      grid-template-columns: minmax(320px, 0.5fr) minmax(0, 1fr);
+    }
     .splitter-selection-bar,
     .splitter-preview-layout {
       display: grid;
@@ -173,6 +225,18 @@
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.035);
+    }
+    .splitter-side-content {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+    .splitter-side-content h3 {
+      margin: 0;
+    }
+    .splitter-side-content select,
+    .splitter-side-content input {
+      width: 100%;
     }
     .splitter-preview-panel,
     .splitter-timeline-panel,
@@ -708,39 +772,17 @@
   </header>
 
   <main class="app-main">
-    <section class="project-console">
+    <section class="project-console{% if metadata.get("task_type", "ai_cuts") == "video_splitter" %} is-splitter-console{% else %} is-ai-console{% endif %}">
       <div class="project-console-copy">
         <div class="project-file-line">
           <span>Arquivo original:</span>
           <strong>{{ metadata.get("video_name", "") }}</strong>
         </div>
         <h1>{{ metadata.get("project_title") or project_id }}</h1>
-        <div class="project-console-meta">
-          <span>ID do projeto: {{ project_id }}</span>
-          {% if metadata.get("duration") %}
-            <span>Duração do vídeo: {{ metadata.get("duration") }} segundos</span>
-          {% endif %}
-          <span>Tempo de processamento: {{ total_processing_time or "—" }}</span>
-          <span>Status atual: {{ metadata.get("status", "") }}</span>
-        </div>
         <div class="project-quick-summary" aria-label="Resumo compacto do projeto">
           <span>{{ project_stage_label }}</span>
-          <span>Transcrição: {% if transcript_text %}sim{% else %}não{% endif %}</span>
-          <span>Participantes: {% if speaker_transcript and speaker_transcript.get("speakers") %}{{ speaker_transcript.get("speakers", [])|length }}{% else %}0{% endif %}</span>
-          <span>Sugestões: {{ ai_suggestions.get("cuts", [])|length if ai_suggestions else 0 }}</span>
-          <span>Cortes: {{ cuts|length }}</span>
           <span>Arquivos: {{ processed_files|length }}</span>
         </div>
-        <details class="technical-log-panel">
-          <summary>
-            <span>Ver log técnico</span>
-            <small>{% if technical_log_text %}Atualizado por último nos processamentos deste projeto{% else %}Nenhum evento técnico registrado ainda{% endif %}</small>
-          </summary>
-          <div class="technical-log-body">
-            <pre data-technical-log>{{ technical_log_text or "O log técnico será criado quando uma etapa começar a processar." }}</pre>
-            <button type="button" class="secondary-button" data-copy-technical-log>Copiar log</button>
-          </div>
-        </details>
       </div>
     </section>
 
@@ -779,7 +821,24 @@
         <h3>Video Splitter</h3>
         <a href="#splitter-main">Modo de divisão</a>
         <a href="#splitter-output">Arquivos gerados</a>
-        <p class="hint">Fluxo sem IA, pensado para fatiar vídeos com precisão operacional.</p>
+        <ul class="rail-meta-list" aria-label="Informações do projeto">
+          <li><span>Status</span><strong>{{ metadata.get("status", "") }}</strong></li>
+          {% if metadata.get("duration") %}
+            <li><span>Duração</span><strong>{{ metadata.get("duration") }}s</strong></li>
+          {% endif %}
+          <li><span>Processamento</span><strong>{{ total_processing_time or "—" }}</strong></li>
+          <li><span>Arquivos</span><strong>{{ processed_files|length }}</strong></li>
+        </ul>
+        <details class="technical-log-panel rail-technical-log">
+          <summary>
+            <span>Log técnico</span>
+            <small>{% if technical_log_text %}Atualizado nos processamentos{% else %}Sem eventos ainda{% endif %}</small>
+          </summary>
+          <div class="technical-log-body">
+            <pre data-technical-log>{{ technical_log_text or "O log técnico será criado quando uma etapa começar a processar." }}</pre>
+            <button type="button" class="secondary-button" data-copy-technical-log>Copiar log</button>
+          </div>
+        </details>
       </aside>
 
       <div class="workspace-main">
@@ -792,7 +851,7 @@
         </div>
       </div>
 
-      <form action="{{ url_for('split_video', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="split_video" data-project-id="{{ project_id }}" data-keep-scroll="true">
+      <form id="splitter-process-form" action="{{ url_for('split_video', project_id=project_id) }}" method="POST" data-progress-job="true" data-job-type="split_video" data-project-id="{{ project_id }}" data-keep-scroll="true">
         <input type="hidden" name="scroll_y" value="0">
 
         <div class="splitter-studio">
@@ -824,37 +883,87 @@
             </div>
 
             <div class="splitter-side-panel">
-              <span class="section-kicker">Seleção visual</span>
-              <h3>Pinçar trecho</h3>
-              <div class="splitter-time-strip">
-                <span>Agora</span>
-                <strong class="splitter-current-time" id="splitter-current-time">00:00:00</strong>
+              <div class="splitter-side-content" id="manual-selection-panel">
+                <span class="section-kicker">Seleção visual</span>
+                <h3>Pinçar trecho</h3>
+                <div class="splitter-time-strip">
+                  <span>Agora</span>
+                  <strong class="splitter-current-time" id="splitter-current-time">00:00:00</strong>
+                </div>
+
+                <div class="splitter-selection-grid">
+                  <div class="time-field">
+                    <label for="splitter-selection-start">Início</label>
+                    <input type="text" id="splitter-selection-start" value="00:00:00" inputmode="numeric">
+                  </div>
+                  <div class="time-field">
+                    <label for="splitter-selection-end">Fim</label>
+                    <input type="text" id="splitter-selection-end" value="00:00:00" inputmode="numeric">
+                  </div>
+                  <div class="name-field">
+                    <label for="splitter-selection-name">Nome do trecho</label>
+                    <input type="text" id="splitter-selection-name" placeholder="Ex: Trecho 01">
+                  </div>
+                </div>
+
+                <div class="splitter-action-row">
+                  <div class="actions-row">
+                    <button type="button" class="secondary-button" id="splitter-mark-start">Marcar início</button>
+                    <button type="button" class="secondary-button" id="splitter-mark-end">Marcar fim</button>
+                  </div>
+                  <div class="actions-row">
+                    <button type="button" class="secondary-button" id="splitter-preview-selection">Reproduzir trecho</button>
+                    <button type="button" id="splitter-add-selection">Adicionar trecho</button>
+                  </div>
+                </div>
               </div>
 
-              <div class="splitter-selection-grid">
-                <div class="time-field">
-                  <label for="splitter-selection-start">Início</label>
-                  <input type="text" id="splitter-selection-start" value="00:00:00" inputmode="numeric">
-                </div>
-                <div class="time-field">
-                  <label for="splitter-selection-end">Fim</label>
-                  <input type="text" id="splitter-selection-end" value="00:00:00" inputmode="numeric">
-                </div>
-                <div class="name-field">
-                  <label for="splitter-selection-name">Nome do trecho</label>
-                  <input type="text" id="splitter-selection-name" placeholder="Ex: Trecho 01">
+              <div id="fixed-duration-fields" class="splitter-side-content">
+                <span class="section-kicker">Duração fixa</span>
+                <h3>Duração de cada parte</h3>
+                <select id="split-duration-select" name="split_duration_seconds">
+                  <option value="15" {% if split_duration == "15" %}selected{% endif %}>15 segundos</option>
+                  <option value="30" {% if split_duration == "30" %}selected{% endif %}>30 segundos</option>
+                  <option value="60" {% if split_duration == "60" or not split_duration %}selected{% endif %}>60 segundos</option>
+                  <option value="90" {% if split_duration == "90" %}selected{% endif %}>90 segundos</option>
+                  <option value="120" {% if split_duration == "120" %}selected{% endif %}>2 minutos</option>
+                  <option value="180" {% if split_duration == "180" %}selected{% endif %}>3 minutos</option>
+                  <option value="300" {% if split_duration == "300" %}selected{% endif %}>5 minutos</option>
+                  <option value="custom" {% if split_duration and split_duration not in ["15", "30", "60", "90", "120", "180", "300"] %}selected{% endif %}>Personalizado</option>
+                </select>
+
+                <div id="custom-duration-field" style="display:none; margin-top:12px;">
+                  <label for="custom_duration_seconds"><strong>Duração personalizada em segundos</strong></label>
+                  <input type="number" id="custom_duration_seconds" name="custom_duration_seconds" min="1" step="1" value="{% if split_duration and split_duration not in ["15", "30", "60", "90", "120", "180", "300"] %}{{ split_duration }}{% endif %}" placeholder="Ex: 45">
                 </div>
               </div>
 
-              <div class="splitter-action-row">
-                <div class="actions-row">
-                  <button type="button" class="secondary-button" id="splitter-mark-start">Marcar início</button>
-                  <button type="button" class="secondary-button" id="splitter-mark-end">Marcar fim</button>
-                </div>
-                <div class="actions-row">
-                  <button type="button" class="secondary-button" id="splitter-preview-selection">Reproduzir trecho</button>
-                  <button type="button" id="splitter-add-selection">Adicionar trecho</button>
-                </div>
+              <div id="parts-fields" class="splitter-side-content" style="display:none;">
+                <span class="section-kicker">Partes iguais</span>
+                <h3>Número de partes</h3>
+                <input type="number" name="split_parts" min="1" max="10" step="1" value="{{ split_parts or 3 }}">
+                <p class="hint">Limite do MVP: até 10 partes.</p>
+              </div>
+
+              <div id="social-preset-fields" class="splitter-side-content" style="display:none;">
+                <span class="section-kicker">Preset social</span>
+                <h3>Preset por rede social</h3>
+
+                <label for="split-social-platform"><strong>Rede social</strong></label>
+                <select id="split-social-platform" name="split_social_platform">
+                  <option value="instagram" {% if split_social_platform == "instagram" %}selected{% endif %}>Instagram</option>
+                  <option value="youtube" {% if split_social_platform == "youtube" %}selected{% endif %}>YouTube</option>
+                  <option value="tiktok" {% if split_social_platform == "tiktok" %}selected{% endif %}>TikTok</option>
+                  <option value="linkedin" {% if split_social_platform == "linkedin" %}selected{% endif %}>LinkedIn</option>
+                </select>
+
+                <label for="split-social-format" style="margin-top:12px;"><strong>Formato</strong></label>
+                <select id="split-social-format" name="split_social_format" data-current-format="{{ split_social_format }}"></select>
+
+                <label for="split-social-duration" style="margin-top:12px;"><strong>Duração de cada parte</strong></label>
+                <select id="split-social-duration" name="split_social_duration_seconds" data-current-duration="{{ split_duration }}"></select>
+
+                <p class="hint">O splitter vai gerar partes sequenciais com a duração escolhida para esse formato.</p>
               </div>
             </div>
           </div>
@@ -916,51 +1025,6 @@
 
           <div class="section-divider"></div>
 
-          <div id="fixed-duration-fields">
-            <h3>Duração de cada parte</h3>
-            <select id="split-duration-select" name="split_duration_seconds">
-              <option value="15" {% if split_duration == "15" %}selected{% endif %}>15 segundos</option>
-              <option value="30" {% if split_duration == "30" %}selected{% endif %}>30 segundos</option>
-              <option value="60" {% if split_duration == "60" or not split_duration %}selected{% endif %}>60 segundos</option>
-              <option value="90" {% if split_duration == "90" %}selected{% endif %}>90 segundos</option>
-              <option value="120" {% if split_duration == "120" %}selected{% endif %}>2 minutos</option>
-              <option value="180" {% if split_duration == "180" %}selected{% endif %}>3 minutos</option>
-              <option value="300" {% if split_duration == "300" %}selected{% endif %}>5 minutos</option>
-              <option value="custom" {% if split_duration and split_duration not in ["15", "30", "60", "90", "120", "180", "300"] %}selected{% endif %}>Personalizado</option>
-            </select>
-
-            <div id="custom-duration-field" style="display:none; margin-top:12px;">
-              <label for="custom_duration_seconds"><strong>Duração personalizada em segundos</strong></label>
-              <input type="number" id="custom_duration_seconds" name="custom_duration_seconds" min="1" step="1" value="{% if split_duration and split_duration not in ["15", "30", "60", "90", "120", "180", "300"] %}{{ split_duration }}{% endif %}" placeholder="Ex: 45">
-            </div>
-          </div>
-
-          <div id="parts-fields" style="display:none;">
-            <h3>Número de partes</h3>
-            <input type="number" name="split_parts" min="1" max="10" step="1" value="{{ split_parts or 3 }}">
-            <p class="hint">Limite do MVP: até 10 partes.</p>
-          </div>
-
-          <div id="social-preset-fields" style="display:none;">
-            <h3>Preset por rede social</h3>
-
-            <label for="split-social-platform"><strong>Rede social</strong></label>
-            <select id="split-social-platform" name="split_social_platform">
-              <option value="instagram" {% if split_social_platform == "instagram" %}selected{% endif %}>Instagram</option>
-              <option value="youtube" {% if split_social_platform == "youtube" %}selected{% endif %}>YouTube</option>
-              <option value="tiktok" {% if split_social_platform == "tiktok" %}selected{% endif %}>TikTok</option>
-              <option value="linkedin" {% if split_social_platform == "linkedin" %}selected{% endif %}>LinkedIn</option>
-            </select>
-
-            <label for="split-social-format" style="margin-top:12px;"><strong>Formato</strong></label>
-            <select id="split-social-format" name="split_social_format" data-current-format="{{ split_social_format }}"></select>
-
-            <label for="split-social-duration" style="margin-top:12px;"><strong>Duração de cada parte</strong></label>
-            <select id="split-social-duration" name="split_social_duration_seconds" data-current-duration="{{ split_duration }}"></select>
-
-            <p class="hint">O splitter vai gerar partes sequenciais com a duração escolhida para esse formato.</p>
-          </div>
-
           <div id="manual-segments-fields" style="display:none;">
             <h3>Trechos manuais</h3>
             <div class="manual-segments-table">
@@ -989,13 +1053,11 @@
           </div>
         </div>
 
-        <button type="submit">Processar divisão</button>
       </form>
 
-      <form action="{{ url_for('reset_project', project_id=project_id) }}" method="POST" data-keep-scroll="true" style="margin-top: 12px;">
-        <input type="hidden" name="scroll_y" value="0">
-        <button type="submit" class="secondary-button">Limpar arquivos gerados</button>
-      </form>
+      <div class="splitter-footer-actions">
+        <button type="submit" form="splitter-process-form" id="splitter-process-button">Processar vídeo</button>
+      </div>
     </section>
 
     <section class="box" id="splitter-output">
@@ -1028,6 +1090,13 @@
         <form action="{{ url_for('open_project_folder', project_id=project_id) }}" method="POST" style="margin-top: 12px;">
           <button type="submit">Abrir pasta do projeto</button>
         </form>
+
+        <div class="splitter-output-actions">
+          <form action="{{ url_for('reset_project', project_id=project_id) }}" method="POST" data-keep-scroll="true">
+            <input type="hidden" name="scroll_y" value="0">
+            <button type="submit" class="secondary-button">Limpar arquivos gerados</button>
+          </form>
+        </div>
       {% else %}
         <div class="empty-state">
           <strong>Nenhum arquivo gerado ainda.</strong>
@@ -1041,6 +1110,8 @@
     <script>
       (function () {
         const splitterForm = document.querySelector('form[action*="/split_video/"]');
+        const splitterStudio = document.querySelector('.splitter-studio');
+        const splitterPreviewLayout = document.querySelector('.splitter-preview-layout');
         const video = document.getElementById('splitter-video');
         const timeline = document.getElementById('splitter-timeline');
         const range = document.getElementById('splitter-timeline-range');
@@ -1063,6 +1134,7 @@
         const modeInputs = document.querySelectorAll('input[name="split_mode"]');
         const fixedFields = document.getElementById('fixed-duration-fields');
         const partsFields = document.getElementById('parts-fields');
+        const manualSelectionPanel = document.getElementById('manual-selection-panel');
         const durationSelect = document.getElementById('split-duration-select');
         const customField = document.getElementById('custom-duration-field');
         const customDurationInput = document.getElementById('custom_duration_seconds');
@@ -1071,6 +1143,7 @@
         const manualList = document.getElementById('manual-segments-list');
         const emptySegments = document.getElementById('splitter-empty-segments');
         const addManualSegmentButton = document.getElementById('add-manual-segment-button');
+        const processButton = document.getElementById('splitter-process-button');
         const socialPlatform = document.getElementById('split-social-platform');
         const socialFormat = document.getElementById('split-social-format');
         const socialDuration = document.getElementById('split-social-duration');
@@ -1410,10 +1483,16 @@
 
         function refreshMode() {
           const mode = getSelectedMode();
-          if (fixedFields) fixedFields.style.display = mode === 'fixed_duration' ? 'block' : 'none';
-          if (partsFields) partsFields.style.display = mode === 'by_parts' ? 'block' : 'none';
-          if (socialFields) socialFields.style.display = mode === 'social_preset' ? 'block' : 'none';
+          if (splitterStudio) splitterStudio.dataset.activeMode = mode;
+          if (splitterPreviewLayout) splitterPreviewLayout.classList.toggle('is-player-only', mode !== 'manual_segments');
+          if (manualSelectionPanel) manualSelectionPanel.style.display = mode === 'manual_segments' ? 'grid' : 'none';
+          if (fixedFields) fixedFields.style.display = mode === 'fixed_duration' ? 'grid' : 'none';
+          if (partsFields) partsFields.style.display = mode === 'by_parts' ? 'grid' : 'none';
+          if (socialFields) socialFields.style.display = mode === 'social_preset' ? 'grid' : 'none';
           if (manualFields) manualFields.style.display = mode === 'manual_segments' ? 'block' : 'none';
+          if (processButton) {
+            processButton.textContent = mode === 'manual_segments' ? 'Processar trechos adicionados' : 'Processar divisão';
+          }
           syncSelectionWithActiveMode('start');
         }
 
@@ -1595,6 +1674,28 @@
       <a href="#section-6" class="{% if step_8_done %}is-done{% endif %}">Cortes definidos</a>
       <a href="#section-7" class="{% if step_9_done %}is-done{% endif %}">Processar cortes</a>
       <a href="#section-8" class="{% if step_10_done %}is-done{% endif %}">Arquivos processados</a>
+      <ul class="rail-meta-list" aria-label="Informações do projeto">
+        <li><span>Status</span><strong>{{ metadata.get("status", "") }}</strong></li>
+        {% if metadata.get("duration") %}
+          <li><span>Duração</span><strong>{{ metadata.get("duration") }}s</strong></li>
+        {% endif %}
+        <li><span>Processamento</span><strong>{{ total_processing_time or "—" }}</strong></li>
+        <li><span>Transcrição</span><strong>{% if transcript_text %}Sim{% else %}Não{% endif %}</strong></li>
+        <li><span>Participantes</span><strong>{% if speaker_transcript and speaker_transcript.get("speakers") %}{{ speaker_transcript.get("speakers", [])|length }}{% else %}0{% endif %}</strong></li>
+        <li><span>Sugestões</span><strong>{{ ai_suggestions.get("cuts", [])|length if ai_suggestions else 0 }}</strong></li>
+        <li><span>Cortes</span><strong>{{ cuts|length }}</strong></li>
+        <li><span>Arquivos</span><strong>{{ processed_files|length }}</strong></li>
+      </ul>
+      <details class="technical-log-panel rail-technical-log">
+        <summary>
+          <span>Log técnico</span>
+          <small>{% if technical_log_text %}Atualizado nos processamentos{% else %}Sem eventos ainda{% endif %}</small>
+        </summary>
+        <div class="technical-log-body">
+          <pre data-technical-log>{{ technical_log_text or "O log técnico será criado quando uma etapa começar a processar." }}</pre>
+          <button type="button" class="secondary-button" data-copy-technical-log>Copiar log</button>
+        </div>
+      </details>
     </aside>
 
     <div class="workspace-main" data-project-steps data-current-step="{{ current_project_step }}" data-after-transcription-step="step-ai" data-speaker-feature-enabled="{% if speaker_feature_enabled %}true{% else %}false{% endif %}">

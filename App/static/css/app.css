@@ -1858,6 +1858,31 @@ button:hover,
   box-shadow: 0 0 0 4px rgba(85, 199, 189, 0.10), var(--evr-shadow-soft);
 }
 
+.radio-card.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.66;
+}
+
+.radio-card.is-disabled:hover {
+  transform: none;
+  border-color: rgba(255, 246, 215, 0.10);
+  box-shadow: none;
+}
+
+.settings-inline-link {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 8px;
+  color: #ffe9a8;
+  font-size: 12px;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.settings-inline-link:hover {
+  color: #fff2c7;
+}
+
 .radio-title {
   color: #fff7df;
 }
@@ -1899,6 +1924,87 @@ button:hover,
   align-items: start;
 }
 
+.settings-page .app-main {
+  display: grid;
+}
+
+.settings-panel[data-settings-section="apis"] {
+  order: 1;
+}
+
+.settings-panel[data-settings-section="performance"] {
+  order: 2;
+}
+
+.settings-panel[data-settings-section="glossary"] {
+  order: 3;
+}
+
+.settings-disclosure {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.settings-disclosure-summary {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: -6px -6px 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 246, 215, 0.10);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-disclosure-summary strong,
+.settings-disclosure-summary small {
+  display: block;
+}
+
+.settings-disclosure-summary strong {
+  color: rgba(255, 249, 233, 0.92);
+  font-size: 15px;
+  font-weight: 780;
+}
+
+.settings-disclosure-summary small {
+  margin-top: 3px;
+  color: rgba(247, 243, 232, 0.52);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.settings-disclosure-summary em {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 246, 215, 0.13);
+  border-radius: 999px;
+  color: rgba(255, 242, 191, 0.86);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.settings-disclosure[open] .settings-disclosure-summary {
+  margin-bottom: 14px;
+  border-color: rgba(88, 222, 214, 0.24);
+  background: rgba(88, 222, 214, 0.055);
+}
+
 .settings-aside {
   position: sticky;
   top: 92px;
@@ -1932,19 +2038,36 @@ button:hover,
 .settings-main {
   display: grid;
   gap: 12px;
+  width: 100%;
   min-width: 0;
 }
 
 .settings-card {
+  min-width: 0;
   padding: 16px;
+}
+
+body.app-shell.settings-page .settings-card .card-header {
+  flex-wrap: wrap;
+}
+
+body.app-shell.settings-page .settings-card .card-header > div {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+body.app-shell.settings-page .settings-grid {
+  grid-template-columns: repeat(2, minmax(320px, 1fr));
 }
 
 .api-card-actions {
   display: flex;
+  flex: 0 1 auto;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 8px;
   align-items: center;
+  max-width: 100%;
 }
 
 .api-help-button {
@@ -1963,6 +2086,20 @@ button:hover,
   border-color: rgba(255, 225, 132, 0.56);
   color: #fff2bf;
   box-shadow: 0 0 24px rgba(232, 200, 101, 0.18);
+}
+
+.danger-action {
+  width: fit-content;
+  margin-top: 14px;
+  border-color: rgba(255, 119, 112, 0.32);
+  color: rgba(255, 184, 178, 0.92);
+  background: rgba(255, 119, 112, 0.055);
+}
+
+.danger-action:hover {
+  border-color: rgba(255, 119, 112, 0.50);
+  color: #ffd7d3;
+  background: rgba(255, 119, 112, 0.10);
 }
 
 .api-help-dialog {
@@ -2023,6 +2160,71 @@ button:hover,
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.api-test-dialog,
+.secret-remove-dialog,
+.settings-feedback-dialog {
+  width: min(620px, 100%);
+}
+
+.api-test-result {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: center;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(255, 246, 215, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.api-test-result strong,
+.api-test-result small {
+  display: block;
+  min-width: 0;
+}
+
+.api-test-result small {
+  grid-column: 2;
+  color: rgba(247, 243, 232, 0.56);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.api-test-result.is-success {
+  border-color: rgba(83, 255, 164, 0.30);
+  background: rgba(83, 255, 164, 0.065);
+}
+
+.api-test-result.is-error {
+  border-color: rgba(255, 119, 112, 0.34);
+  background: rgba(255, 119, 112, 0.07);
+}
+
+.api-test-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(88, 222, 214, 0.22);
+  border-top-color: rgba(88, 222, 214, 0.90);
+  border-radius: 50%;
+  animation: evrSpin 0.8s linear infinite;
+}
+
+@keyframes evrSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.api-test-actions,
+.secret-remove-actions,
+.settings-feedback-actions {
+  justify-content: flex-end;
+  margin-top: 18px;
 }
 
 .performance-card {
@@ -3955,13 +4157,13 @@ body.app-shell.project-page .done-check {
 
 /* Sprint 3.1 refinement: stronger settings health indicators */
 body.app-shell.settings-page .settings-console {
-  grid-template-columns: minmax(0, 0.9fr) minmax(520px, 1.1fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: 28px;
 }
 
 body.app-shell.settings-page .settings-status-strip {
   display: grid;
-  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   width: min(520px, 100%);
   justify-self: end;
@@ -3972,10 +4174,12 @@ body.app-shell.settings-page .settings-status-strip .chip {
   justify-content: center;
   padding: 18px 20px;
   border-radius: 22px;
-  font-size: 22px;
+  font-size: clamp(16px, 1.45vw, 22px);
   font-weight: 900;
   letter-spacing: 0;
-  white-space: nowrap;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
   transform: translateZ(0);
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
@@ -5116,6 +5320,115 @@ body.app-shell.project-page .done-check::after {
 .technical-log-body button {
   justify-self: end;
   margin-top: 0;
+}
+
+body.app-shell.project-page .project-console.is-splitter-console,
+body.app-shell.project-page .project-console.is-ai-console {
+  padding-block: 18px;
+}
+
+body.app-shell.project-page .project-console.is-splitter-console .project-console-copy h1,
+body.app-shell.project-page .project-console.is-ai-console .project-console-copy h1 {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: clamp(22px, 2.35vw, 34px);
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.app-shell.project-page .project-console.is-splitter-console .project-file-line,
+body.app-shell.project-page .project-console.is-ai-console .project-file-line {
+  margin-bottom: 6px;
+}
+
+body.app-shell.project-page .project-console.is-splitter-console .project-quick-summary,
+body.app-shell.project-page .project-console.is-ai-console .project-quick-summary {
+  margin-top: 12px;
+}
+
+body.app-shell.project-page .project-console.is-splitter-console .project-quick-summary span,
+body.app-shell.project-page .project-console.is-ai-console .project-quick-summary span {
+  min-height: 24px;
+  padding: 5px 9px;
+  color: rgba(247, 243, 232, 0.56);
+  font-size: 11px;
+  font-weight: 520;
+}
+
+.rail-meta-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rail-meta-list li {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 246, 215, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.rail-meta-list span {
+  color: rgba(247, 243, 232, 0.36);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rail-meta-list strong {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(247, 243, 232, 0.70);
+  font-size: 12px;
+  font-weight: 560;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-rail .rail-technical-log {
+  margin-top: 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.workspace-rail .rail-technical-log summary {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+}
+
+.workspace-rail .rail-technical-log summary span {
+  font-size: 12px;
+}
+
+.workspace-rail .rail-technical-log summary small {
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.workspace-rail .rail-technical-log .technical-log-body {
+  padding: 0 10px 10px;
+}
+
+.workspace-rail .rail-technical-log .technical-log-body pre {
+  max-height: 180px;
+  padding: 9px;
+  font-size: 10px;
+}
+
+.workspace-rail .rail-technical-log .technical-log-body button {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  font-size: 11px;
 }
 
 @media (max-width: 620px) {

@@ -128,21 +128,27 @@
       </div>
     {% endif %}
 
+    {% if storage_status.exists %}
     <div class="content-grid home-content-grid">
       <section class="box">
         <form action="{{ url_for('upload_video') }}" method="POST" enctype="multipart/form-data">
           <label>Escolha a tarefa a ser realizada</label>
           <div class="radio-group" data-tour-target="task">
-            <label class="radio-card">
-              <input type="radio" name="task_type" value="ai_cuts" checked>
+            <label class="radio-card{% if not api_settings.ai_ok %} is-disabled{% endif %}">
+              <input type="radio" name="task_type" value="ai_cuts" {% if api_settings.ai_ok %}checked{% else %}disabled{% endif %}>
               <span>
                 <span class="radio-title">Cortes inteligentes com I.A</span>
-                <span class="radio-description">Transcreve, identifica oportunidades e ajuda a montar conteúdo principal e gancho.</span>
+                {% if api_settings.ai_ok %}
+                  <span class="radio-description">Transcreve, identifica oportunidades e ajuda a montar conteúdo principal e gancho.</span>
+                {% else %}
+                  <span class="radio-description">Requer um provedor de IA configurado e testado.</span>
+                  <a class="settings-inline-link" href="{{ url_for('settings_page') }}">Configurar IA</a>
+                {% endif %}
               </span>
             </label>
 
             <label class="radio-card">
-              <input type="radio" name="task_type" value="video_splitter">
+              <input type="radio" name="task_type" value="video_splitter" {% if not api_settings.ai_ok %}checked{% endif %}>
               <span>
                 <span class="radio-title">Video Splitter</span>
                 <span class="radio-description">Divide vídeos por duração, número de partes, presets sociais ou trechos manuais.</span>
@@ -164,6 +170,7 @@
       </section>
     </div>
 
+    {% if projects %}
     <section class="box" data-tour-target="projects">
       <div class="card-header">
         <div>
@@ -172,7 +179,6 @@
         <span class="chip is-dark">{{ projects|length }} total</span>
       </div>
 
-      {% if projects %}
         <div class="project-filters" data-project-filters>
           <input type="search" data-project-search placeholder="Buscar projeto, arquivo ou etapa">
           <select data-project-flow-filter aria-label="Filtrar por tarefa">
@@ -277,13 +283,9 @@
           <strong>Nenhum projeto encontrado.</strong>
           <span>Ajuste a busca ou os filtros para ver outros projetos.</span>
         </div>
-      {% else %}
-        <div class="empty-state">
-          <strong>Nenhum projeto criado ainda.</strong>
-          <span>Crie o primeiro projeto usando o formulário acima.</span>
-        </div>
-      {% endif %}
     </section>
+    {% endif %}
+    {% endif %}
   </main>
 
   <footer class="app-footer">

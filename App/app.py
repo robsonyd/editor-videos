@@ -439,10 +439,22 @@ def get_public_api_settings() -> dict:
         or (provider == health.get("ai_provider") and bool(health.get("ai_ok")))
         or (provider == "openai" and bool(health.get("openai_ok")))
     )
+    ai_status = "missing"
+    if ai_configured and ai_ok:
+        ai_status = "manual" if current_provider_health.get("manual") else "valid"
+    elif ai_configured:
+        ai_status = "invalid" if current_provider_health.get("checked_at") else "saved_untested"
     openai_configured = bool(settings.get("openai_api_key"))
     huggingface_configured = bool(settings.get("huggingface_token"))
     openai_ok = openai_configured and bool(health.get("openai_ok"))
     huggingface_ok = huggingface_configured and bool(health.get("huggingface_ok"))
+    huggingface_status = "missing"
+    if huggingface_configured and huggingface_ok:
+        huggingface_status = "valid"
+    elif huggingface_configured and health.get("huggingface_checked_at"):
+        huggingface_status = "invalid"
+    elif huggingface_configured:
+        huggingface_status = "saved_untested"
     return {
         "ai_provider": provider,
         "ai_provider_label": provider_option["label"],
@@ -450,6 +462,7 @@ def get_public_api_settings() -> dict:
         "ai_provider_help_url": provider_option.get("help_url", ""),
         "ai_configured": ai_configured,
         "ai_ok": ai_ok,
+        "ai_status": ai_status,
         "ai_checked_at": current_provider_health.get("checked_at") or health.get("ai_checked_at", ""),
         "ai_api_key_masked": mask_secret(settings.get("ai_api_key", "")),
         "ai_model": settings.get("ai_model", ""),
@@ -463,6 +476,7 @@ def get_public_api_settings() -> dict:
         "openai_model": settings.get("openai_model", ""),
         "huggingface_configured": huggingface_configured,
         "huggingface_ok": huggingface_ok,
+        "huggingface_status": huggingface_status,
         "huggingface_checked_at": health.get("huggingface_checked_at", ""),
         "huggingface_token_masked": mask_secret(settings.get("huggingface_token", "")),
         "pyannote_model": settings.get("pyannote_model", ""),
@@ -555,6 +569,7 @@ def get_public_performance_settings() -> dict:
     return {
         "mode": mode,
         "label": get_performance_mode_label(mode),
+        "configured": True,
         "options": [
             {
                 **item,
@@ -3727,8 +3742,9 @@ def home():
                     }
                 )
     ai_integrations_alert = get_ai_integrations_alert()
+    api_settings = get_public_api_settings()
     home_alerts = []
-    if not ai_integrations_alert["ok"]:
+    if storage_status.get("exists") and not ai_integrations_alert["ok"]:
         home_alerts.append(
             {
                 "severity": ai_integrations_alert["severity"],
@@ -3763,6 +3779,7 @@ def home():
         show_terms_acceptance=not terms_accepted,
         terms_version=TERMS_VERSION,
         ai_integrations_alert=ai_integrations_alert,
+        api_settings=api_settings,
         home_alerts=home_alerts,
     )
 
@@ -3854,6 +3871,8 @@ def save_api_settings():
     ai_model = normalize_ai_model(ai_provider, request.form.get("ai_model", "").strip())
     huggingface_token = request.form.get("huggingface_token", "").strip()
     pyannote_model = request.form.get("pyannote_model", "").strip()
+    clear_ai_api_key = request.form.get("clear_ai_api_key") == "1"
+    clear_huggingface_token = request.form.get("clear_huggingface_token") == "1"
 
     allowed_pyannote_models = {item["value"] for item in PYANNOTE_MODEL_OPTIONS}
 
@@ -3862,7 +3881,8 @@ def save_api_settings():
 
     ai_api_keys = current.get("ai_api_keys", {}).copy()
     ai_models = current.get("ai_models", {}).copy()
-    if request.form.get("clear_ai_api_key") == "1":
+    previous_model = ai_models.get(ai_provider)
+    if clear_ai_api_key:
         ai_api_keys[ai_provider] = ""
     elif ai_api_key:
         ai_api_keys[ai_provider] = ai_api_key
@@ -3874,7 +3894,7 @@ def save_api_settings():
         "ai_models": ai_models,
         "openai_api_key": ai_api_keys.get("openai", ""),
         "openai_model": ai_models.get("openai", normalize_ai_model("openai", None)),
-        "huggingface_token": "" if request.form.get("clear_huggingface_token") == "1" else (huggingface_token or current.get("huggingface_token", "")),
+        "huggingface_token": "" if clear_huggingface_token else (huggingface_token or current.get("huggingface_token", "")),
         "pyannote_model": pyannote_model,
     }
 
@@ -3885,7 +3905,8 @@ def save_api_settings():
 
     health_update = {"ai_provider": ai_provider}
     provider_changed = ai_provider != current.get("ai_provider")
-    ai_credentials_changed = request.form.get("clear_ai_api_key") == "1" or bool(ai_api_key) or provider_changed
+    ai_model_changed = bool(previous_model) and previous_model != ai_model
+    ai_credentials_changed = clear_ai_api_key or bool(ai_api_key) or provider_changed or ai_model_changed
     if ai_credentials_changed:
         provider_health[ai_provider] = {"ok": False, "checked_at": "", "model": ai_model}
         health_update["ai_provider_health"] = provider_health
@@ -3894,14 +3915,24 @@ def save_api_settings():
     if ai_provider == "openai" and ai_credentials_changed:
         health_update["openai_ok"] = False
         health_update["openai_checked_at"] = ""
-    if request.form.get("clear_huggingface_token") == "1" or huggingface_token:
+    if clear_huggingface_token or huggingface_token:
         health_update["huggingface_ok"] = False
         health_update["huggingface_checked_at"] = ""
 
     save_app_config({"api_settings": updated})
     if health_update:
         save_app_config({"api_health": health_update})
-    return redirect(url_for("settings_page", saved="1"))
+
+    auto_tests = []
+    if not clear_ai_api_key and ai_credentials_changed and ai_api_keys.get(ai_provider):
+        auto_tests.append("ai")
+    if not clear_huggingface_token and huggingface_token:
+        auto_tests.append("huggingface")
+
+    redirect_args = {"saved": "1", "focus": "api"}
+    if auto_tests:
+        redirect_args["test_after_save"] = ",".join(auto_tests)
+    return redirect(url_for("settings_page", **redirect_args))
 
 
 @app.route("/save_performance_settings", methods=["POST"])
@@ -4046,8 +4077,9 @@ def test_api_settings(provider):
                 provider_health = {}
             provider_health[selected_provider] = {
                 "ok": False,
-                "checked_at": "",
+                "checked_at": datetime.now().isoformat(timespec="seconds"),
                 "model": get_ai_model(selected_provider),
+                "last_error": message,
             }
             health_update = {
                 "ai_ok": False,
@@ -4059,7 +4091,67 @@ def test_api_settings(provider):
                 health_update["openai_checked_at"] = ""
             save_app_config({"api_health": health_update})
         elif provider == "huggingface":
-            save_app_config({"api_health": {"huggingface_ok": False, "huggingface_checked_at": ""}})
+            save_app_config({"api_health": {"huggingface_ok": False, "huggingface_checked_at": datetime.now().isoformat(timespec="seconds")}})
+        if is_ajax_request():
+            return jsonify({"ok": False, "message": message}), 400
+        return redirect(url_for("settings_page", api_error=message))
+
+
+@app.route("/confirm_api_settings/<provider>", methods=["POST"])
+def confirm_api_settings(provider):
+    try:
+        settings = get_api_settings()
+        checked_at = datetime.now().isoformat(timespec="seconds")
+
+        if provider in ("ai", "openai", "claude", "gemini", "deepseek"):
+            selected_provider = normalize_ai_provider(settings.get("ai_provider") if provider in ("ai", "openai") else provider)
+            if not get_ai_api_key(selected_provider):
+                raise RuntimeError(f"{get_ai_provider_label(selected_provider)} API Key não configurada.")
+
+            health = load_app_config().get("api_health", {})
+            provider_health = health.get("ai_provider_health", {})
+            if not isinstance(provider_health, dict):
+                provider_health = {}
+            provider_health[selected_provider] = {
+                "ok": True,
+                "manual": True,
+                "checked_at": checked_at,
+                "model": get_ai_model(selected_provider),
+            }
+            health_update = {
+                "ai_ok": True,
+                "ai_provider": selected_provider,
+                "ai_checked_at": checked_at,
+                "ai_provider_health": provider_health,
+            }
+            if selected_provider == "openai":
+                health_update["openai_ok"] = True
+                health_update["openai_checked_at"] = checked_at
+            save_app_config({"api_health": health_update})
+            message = f"{get_ai_provider_label(selected_provider)} marcada como configurada manualmente."
+
+        elif provider == "huggingface":
+            if not settings.get("huggingface_token"):
+                raise RuntimeError("Hugging Face Token não configurado.")
+            save_app_config(
+                {
+                    "api_health": {
+                        "huggingface_ok": True,
+                        "huggingface_checked_at": checked_at,
+                    }
+                }
+            )
+            message = "Hugging Face marcada como configurada manualmente."
+
+        else:
+            raise ValueError("Provedor inválido.")
+
+        if is_ajax_request():
+            return jsonify({"ok": True, "message": message})
+        return redirect(url_for("settings_page", api_test=message))
+
+    except Exception as e:
+        message = compact_error_text(str(e), 1200)
         if is_ajax_request():
             return jsonify({"ok": False, "message": message}), 400
         return redirect(url_for("settings_page", api_error=message))
@@ -4245,6 +4337,13 @@ def upload_video():
     task_type = request.form.get("task_type", "ai_cuts")
     if task_type not in ("ai_cuts", "video_splitter"):
         task_type = "ai_cuts"
+    if task_type == "ai_cuts" and not get_public_api_settings().get("ai_ok"):
+        return redirect(
+            url_for(
+                "home",
+                upload_error="Cortes inteligentes com I.A exigem um provedor de IA configurado e testado. Abra Configurações, cadastre uma chave de IA e teste a conexão antes de criar este tipo de projeto.",
+            )
+        )
     project_slug = sanitize_filename(project_title).lower().replace(" ", "_")
     project_id = build_unique_project_id(project_slug)
     project_path = ensure_project_structure(project_id)

@@ -153,6 +153,11 @@
       ],
       settings: [
         {
+          target: '[data-tour-target="settings-apis"]',
+          title: 'APIs e testes',
+          body: 'Cole, salve e teste a IA principal. Configure Hugging Face apenas se quiser mapear participantes por voz.'
+        },
+        {
           target: '[data-tour-target="settings-performance"]',
           title: 'Desempenho',
           body: 'Escolha o ritmo de processamento antes de trabalhos longos. Econômico prioriza conforto térmico; máximo prioriza velocidade.'
@@ -161,11 +166,6 @@
           target: '[data-tour-target="settings-glossary"]',
           title: 'Glossário',
           body: 'Cadastre termos que a IA deve corrigir automaticamente na transcrição revisada, como nomes de empresas e expressões recorrentes.'
-        },
-        {
-          target: '[data-tour-target="settings-apis"]',
-          title: 'APIs e testes',
-          body: 'Cole, salve e teste a IA principal. Configure Hugging Face apenas se quiser mapear participantes por voz.'
         }
       ],
       ai_cuts: [
