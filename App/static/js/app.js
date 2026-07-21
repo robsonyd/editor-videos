@@ -47,7 +47,7 @@
   });
 
   const spotlightTargets = document.querySelectorAll(
-    '.home-console, .settings-console, .box, .project-row, .settings-card, .speaker-card, .ai-card, .radio-card, .file-card, .technical-log-panel'
+    '.home-console, .settings-console, .box, .project-row, .settings-card, .speaker-card, .ai-card, .radio-card, .file-card, .technical-log-panel, .overlay-editor-card'
   );
 
   spotlightTargets.forEach((element) => {
@@ -133,7 +133,7 @@
         {
           target: '[data-tour-target="task"]',
           title: 'Escolha o fluxo',
-          body: 'Comece escolhendo entre cortes inteligentes com I.A ou Video Splitter antes de enviar o vídeo bruto.'
+          body: 'Comece escolhendo entre cortes inteligentes com I.A, Video Splitter ou Elementos visuais antes de enviar o vídeo bruto.'
         },
         {
           target: '[data-tour-target="upload"]',

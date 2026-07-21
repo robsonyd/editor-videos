@@ -164,6 +164,11 @@ SUPPORTED_VIDEO_EXTENSIONS = {
     ".m2ts",
     ".3gp",
 }
+VISUAL_OVERLAY_IMAGE_EXTENSIONS = {".png"}
+VISUAL_OVERLAY_VIDEO_EXTENSIONS = {".mov", ".m4v", ".webm", ".mkv", ".gif", ".apng", ".avi"}
+SUPPORTED_VISUAL_OVERLAY_EXTENSIONS = VISUAL_OVERLAY_IMAGE_EXTENSIONS | VISUAL_OVERLAY_VIDEO_EXTENSIONS
+VISUAL_OVERLAY_MAX_ELEMENTS = 50
+VISUAL_OVERLAY_MAX_OCCURRENCES_PER_ELEMENT = 240
 CHATGPT_HELP_TEXT = "Se precisar, peça ajuda ao ChatGPT colando esta mensagem de erro."
 ROBSON_DIAGNOSTIC_TEXT = (
     "Se continuar falhando, envie para Robson: versão do macOS, modelo do Mac, "
@@ -190,14 +195,21 @@ ACTIVE_PROCESSES: dict[tuple[str, str], subprocess.Popen] = {}
 ACTIVE_KEEP_AWAKE_PROCESSES: dict[tuple[str, str], subprocess.Popen] = {}
 CANCELLED_JOBS: set[tuple[str, str]] = set()
 
-JOB_TYPES = ["generate_transcription", "identify_speakers", "suggest_cuts", "process_cuts", "split_video"]
+JOB_TYPES = ["generate_transcription", "identify_speakers", "suggest_cuts", "process_cuts", "split_video", "process_visual_overlays"]
 JOB_HOME_LABELS = {
     "generate_transcription": "Transcrição e revisão",
     "identify_speakers": "Mapeamento de participantes",
     "suggest_cuts": "Sugestões da IA",
     "process_cuts": "Processamento de cortes",
     "split_video": "Video Splitter",
+    "process_visual_overlays": "Elementos visuais",
 }
+TASK_TYPE_LABELS = {
+    "ai_cuts": "Cortes inteligentes com I.A",
+    "video_splitter": "Video Splitter",
+    "visual_overlay": "Elementos visuais",
+}
+VALID_TASK_TYPES = tuple(TASK_TYPE_LABELS.keys())
 JOB_HISTORY_LIMIT = 12
 DEFAULT_AI_CUT_OPTION_COUNT = 6
 DEFAULT_AI_HOOK_OPTION_COUNT = 1
@@ -253,6 +265,7 @@ def get_default_app_config() -> dict:
             "settings_tour_seen": False,
             "ai_cuts_tour_seen": False,
             "video_splitter_tour_seen": False,
+            "visual_overlay_tour_seen": False,
         },
         "api_health": {
             "ai_ok": False,
@@ -1313,6 +1326,16 @@ def get_split_manual_segments_path(project_id: str) -> Path:
     return get_project_subdir(project_id, "Dados de Processamento") / "split_manual_segments.json"
 
 
+def get_visual_overlay_assets_dir(project_id: str) -> Path:
+    path = get_project_subdir(project_id, "Dados de Processamento") / "Elementos Visuais" / "Assets"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_visual_overlay_config_path(project_id: str) -> Path:
+    return get_project_subdir(project_id, "Dados de Processamento") / "Elementos Visuais" / "visual_overlays.json"
+
+
 # Retorna o caminho base dos arquivos de transcrição.
 def get_transcript_txt_path(project_id: str) -> Path:
     return get_project_subdir(project_id, "Transcrições") / f"{project_id}_transcricao.txt"
@@ -1483,7 +1506,7 @@ def run_ffprobe_json(video_path: Path | str) -> dict:
                 "-v",
                 "error",
                 "-show_entries",
-                "format=duration:stream=index,codec_type,codec_name",
+                "format=duration:stream=index,codec_type,codec_name,width,height,pix_fmt:stream_tags=alpha_mode",
                 "-of",
                 "json",
                 str(video_path),
@@ -1543,6 +1566,9 @@ def probe_video_file(video_path: Path | str, require_audio: bool = False) -> dic
         "duration": round(duration, 2),
         "video_codec": video_streams[0].get("codec_name", ""),
         "audio_codec": audio_streams[0].get("codec_name", "") if audio_streams else "",
+        "width": video_streams[0].get("width") or "",
+        "height": video_streams[0].get("height") or "",
+        "pix_fmt": video_streams[0].get("pix_fmt") or "",
         "has_audio": bool(audio_streams),
         "has_video": bool(video_streams),
     }
@@ -1551,6 +1577,307 @@ def probe_video_file(video_path: Path | str, require_audio: bool = False) -> dic
 def validate_uploaded_video(video_path: Path | str, original_filename: str, task_type: str) -> dict:
     validate_supported_video_extension(original_filename)
     return probe_video_file(video_path, require_audio=(task_type == "ai_cuts"))
+
+
+def visual_overlay_default_element(index: int) -> dict:
+    element = {
+        "id": f"element_{index}",
+        "name": f"Elemento {index:02d}",
+        "position": "top_right",
+        "schedule_mode": "full_video",
+        "duration_seconds": 8,
+        "interval_seconds": 10,
+        "count": 3,
+        "width_percent": 18,
+        "x_percent": 100,
+        "y_percent": 0,
+        "opacity": 100,
+        "layer": index,
+        "queue_order": index,
+        "enabled": True,
+    }
+    element["id"] = f"element_{index}"
+    element["asset_filename"] = ""
+    element["asset_kind"] = ""
+    element["validation"] = {}
+    return element
+
+
+def load_visual_overlay_config(project_id: str) -> dict:
+    path = get_visual_overlay_config_path(project_id)
+    default = {
+        "version": 1,
+        "updated_at": "",
+        "output_name_base": "video_com_elementos_visuais",
+        "queue_behavior": "split_once",
+        "queue_slot_seconds": 10,
+        "elements": [],
+    }
+    if not path.exists():
+        return default
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            default.update(data)
+        if not isinstance(default.get("elements"), list):
+            default["elements"] = []
+    except json.JSONDecodeError:
+        pass
+    return default
+
+
+def save_visual_overlay_config(project_id: str, config: dict):
+    config = dict(config or {})
+    config["version"] = 1
+    config["updated_at"] = datetime.now().isoformat(timespec="seconds")
+    path = get_visual_overlay_config_path(project_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+
+
+def build_visual_overlay_form_state(project_id: str) -> dict:
+    config_path = get_visual_overlay_config_path(project_id)
+    config = load_visual_overlay_config(project_id)
+    existing_elements = [item for item in config.get("elements", []) if isinstance(item, dict)]
+    rows = []
+    row_total = len(existing_elements)
+    if row_total == 0 and not config_path.exists():
+        row_total = 1
+
+    for index in range(1, row_total + 1):
+        row = visual_overlay_default_element(index)
+        if index <= len(existing_elements):
+            row.update(existing_elements[index - 1])
+            row.setdefault("id", f"element_{index}")
+        rows.append(row)
+    config["elements"] = rows[:VISUAL_OVERLAY_MAX_ELEMENTS]
+    config.setdefault("queue_behavior", "split_once")
+    config.setdefault("queue_slot_seconds", 10)
+    config.setdefault("output_name_base", "video_com_elementos_visuais")
+    return config
+
+
+def visual_overlay_asset_kind(filename: str) -> str:
+    extension = Path(filename or "").suffix.lower()
+    if extension in VISUAL_OVERLAY_IMAGE_EXTENSIONS:
+        return "image"
+    if extension in VISUAL_OVERLAY_VIDEO_EXTENSIONS:
+        return "video"
+    return ""
+
+
+def visual_overlay_asset_path(project_id: str, asset_filename: str) -> Path | None:
+    asset_filename = Path(asset_filename or "").name
+    if not asset_filename:
+        return None
+    path = get_visual_overlay_assets_dir(project_id) / asset_filename
+    return path if path.exists() else None
+
+
+def build_unique_visual_asset_name(project_id: str, filename: str) -> str:
+    original = Path(filename or "asset").name
+    extension = Path(original).suffix.lower()
+    stem = sanitize_filename(Path(original).stem).replace(" ", "_").lower()
+    if not stem:
+        stem = "asset"
+    assets_dir = get_visual_overlay_assets_dir(project_id)
+    candidate = f"{stem}{extension}"
+    index = 2
+    while (assets_dir / candidate).exists():
+        candidate = f"{stem}_{index}{extension}"
+        index += 1
+    return candidate
+
+
+def save_visual_overlay_upload(project_id: str, uploaded_file) -> str:
+    original_name = Path(uploaded_file.filename or "").name
+    extension = Path(original_name).suffix.lower()
+    if extension not in SUPPORTED_VISUAL_OVERLAY_EXTENSIONS:
+        allowed = ", ".join(sorted(SUPPORTED_VISUAL_OVERLAY_EXTENSIONS))
+        raise ValueError(f"Asset visual não suportado: {extension or 'sem extensão'}. Use {allowed}.")
+    destination_name = build_unique_visual_asset_name(project_id, original_name)
+    destination = get_visual_overlay_assets_dir(project_id) / destination_name
+    uploaded_file.save(destination)
+    return destination_name
+
+
+def visual_asset_has_alpha(pix_fmt: str, tags: dict | None = None) -> bool:
+    pix_fmt = (pix_fmt or "").lower()
+    tags = tags if isinstance(tags, dict) else {}
+    return (
+        "rgba" in pix_fmt
+        or "bgra" in pix_fmt
+        or "argb" in pix_fmt
+        or "abgr" in pix_fmt
+        or "yuva" in pix_fmt
+        or "ayuv" in pix_fmt
+        or pix_fmt in {"pal8", "ya8"}
+        or str(tags.get("alpha_mode", "")).strip() == "1"
+    )
+
+
+def probe_visual_overlay_asset(asset_path: Path) -> dict:
+    extension = asset_path.suffix.lower()
+    kind = visual_overlay_asset_kind(asset_path.name)
+    if not kind:
+        raise ValueError(f"Formato de asset não suportado: {extension or 'sem extensão'}.")
+
+    try:
+        probe = run_ffprobe_json(asset_path)
+    except Exception as exc:
+        raise RuntimeError(f"Não consegui validar o asset visual '{asset_path.name}'. {exc}") from exc
+
+    streams = probe.get("streams", []) if isinstance(probe.get("streams"), list) else []
+    video_streams = [stream for stream in streams if stream.get("codec_type") == "video"]
+    if not video_streams:
+        raise ValueError(f"O asset '{asset_path.name}' não contém imagem/vídeo válido.")
+
+    stream = video_streams[0]
+    try:
+        duration = float((probe.get("format") or {}).get("duration") or 0)
+    except (TypeError, ValueError):
+        duration = 0
+
+    width = int(stream.get("width") or 0)
+    height = int(stream.get("height") or 0)
+    if width <= 0 or height <= 0:
+        raise ValueError(f"Não consegui identificar o tamanho do asset '{asset_path.name}'.")
+
+    pix_fmt = stream.get("pix_fmt") or ""
+    tags = stream.get("tags") if isinstance(stream.get("tags"), dict) else {}
+    has_alpha = visual_asset_has_alpha(pix_fmt, tags)
+    alpha_note = "Alpha detectado." if has_alpha else "Alpha não confirmado; se o arquivo for opaco, ele cobrirá o vídeo."
+
+    return {
+        "kind": kind,
+        "extension": extension,
+        "codec": stream.get("codec_name") or "",
+        "width": width,
+        "height": height,
+        "duration": round(duration, 2),
+        "pix_fmt": pix_fmt,
+        "has_alpha": has_alpha,
+        "alpha_note": alpha_note,
+    }
+
+
+def parse_visual_float(value, default_value: float, min_value: float, max_value: float) -> float:
+    try:
+        number = float(str(value or "").strip().replace(",", "."))
+    except (TypeError, ValueError):
+        number = default_value
+    return max(min_value, min(max_value, number))
+
+
+def parse_visual_int(value, default_value: int, min_value: int, max_value: int) -> int:
+    try:
+        number = int(float(str(value or "").strip().replace(",", ".")))
+    except (TypeError, ValueError):
+        number = default_value
+    return max(min_value, min(max_value, number))
+
+
+def parse_visual_overlay_form(project_id: str, require_active: bool = False) -> dict:
+    existing_config = load_visual_overlay_config(project_id)
+    existing_by_id = {
+        str(element.get("id")): element
+        for element in existing_config.get("elements", [])
+        if isinstance(element, dict) and element.get("id")
+    }
+
+    ids = request.form.getlist("overlay_id[]")
+    names = request.form.getlist("overlay_name[]")
+    existing_assets = request.form.getlist("overlay_existing_asset[]")
+    positions = request.form.getlist("overlay_position[]")
+    schedule_modes = request.form.getlist("overlay_schedule_mode[]")
+    durations = request.form.getlist("overlay_duration_seconds[]")
+    intervals = request.form.getlist("overlay_interval_seconds[]")
+    counts = request.form.getlist("overlay_count[]")
+    widths = request.form.getlist("overlay_width_percent[]")
+    positions_x = request.form.getlist("overlay_x_percent[]")
+    positions_y = request.form.getlist("overlay_y_percent[]")
+    opacities = request.form.getlist("overlay_opacity[]")
+    layers = request.form.getlist("overlay_layer[]")
+    queue_orders = request.form.getlist("overlay_queue_order[]")
+    enabled_ids = set(request.form.getlist("overlay_enabled[]"))
+
+    row_count = min(
+        VISUAL_OVERLAY_MAX_ELEMENTS,
+        max(
+            len(ids),
+            len(names),
+            len(existing_assets),
+            len(positions),
+            len(schedule_modes),
+        ),
+    )
+    elements = []
+
+    for index in range(row_count):
+        element_id = (ids[index] if index < len(ids) else "").strip() or f"element_{index + 1}"
+        old_element = existing_by_id.get(element_id, {})
+        is_enabled = element_id in enabled_ids
+
+        asset_filename = Path(existing_assets[index]).name if index < len(existing_assets) else ""
+        uploaded = request.files.get(f"overlay_asset_{index}")
+        if uploaded and uploaded.filename:
+            asset_filename = save_visual_overlay_upload(project_id, uploaded)
+        elif not asset_filename:
+            asset_filename = Path(str(old_element.get("asset_filename", ""))).name
+
+        validation = {}
+        asset_path = visual_overlay_asset_path(project_id, asset_filename)
+        if asset_filename and asset_path:
+            validation = probe_visual_overlay_asset(asset_path)
+        elif is_enabled and require_active:
+            raise ValueError(f"Escolha um arquivo visual para o elemento {index + 1}.")
+
+        default = visual_overlay_default_element(index + 1)
+        name = (names[index] if index < len(names) else "").strip() or old_element.get("name") or default["name"]
+        schedule_mode = (schedule_modes[index] if index < len(schedule_modes) else old_element.get("schedule_mode") or default["schedule_mode"]).strip()
+        if schedule_mode not in {"full_video", "interval", "even_count", "queue_equal"}:
+            schedule_mode = "full_video"
+
+        position = (positions[index] if index < len(positions) else old_element.get("position") or default["position"]).strip()
+        if position not in {"top_right", "top_left", "bottom_right", "bottom_left", "center", "full_frame"}:
+            position = "top_right"
+
+        element = {
+            "id": element_id,
+            "enabled": is_enabled,
+            "name": name[:80],
+            "asset_filename": asset_filename,
+            "asset_kind": validation.get("kind") or visual_overlay_asset_kind(asset_filename),
+            "position": position,
+            "schedule_mode": schedule_mode,
+            "duration_seconds": parse_visual_float(durations[index] if index < len(durations) else old_element.get("duration_seconds"), default["duration_seconds"], 0.25, 86400),
+            "interval_seconds": parse_visual_float(intervals[index] if index < len(intervals) else old_element.get("interval_seconds"), default["interval_seconds"], 0.25, 86400),
+            "count": parse_visual_int(counts[index] if index < len(counts) else old_element.get("count"), default["count"], 1, 500),
+            "width_percent": parse_visual_float(widths[index] if index < len(widths) else old_element.get("width_percent"), default["width_percent"], 1, 100),
+            "x_percent": parse_visual_float(positions_x[index] if index < len(positions_x) else old_element.get("x_percent"), default["x_percent"], 0, 100),
+            "y_percent": parse_visual_float(positions_y[index] if index < len(positions_y) else old_element.get("y_percent"), default["y_percent"], 0, 100),
+            "opacity": parse_visual_float(opacities[index] if index < len(opacities) else old_element.get("opacity"), default["opacity"], 0, 100),
+            "layer": parse_visual_int(layers[index] if index < len(layers) else old_element.get("layer"), default["layer"], 1, 50),
+            "queue_order": parse_visual_int(queue_orders[index] if index < len(queue_orders) else old_element.get("queue_order"), default["queue_order"], 1, 999),
+            "validation": validation or old_element.get("validation", {}),
+        }
+        elements.append(element)
+
+    config = {
+        "version": 1,
+        "output_name_base": sanitize_filename(request.form.get("visual_overlay_output_name", "video_com_elementos_visuais") or "video_com_elementos_visuais"),
+        "queue_behavior": request.form.get("visual_overlay_queue_behavior", "split_once") if request.form.get("visual_overlay_queue_behavior", "split_once") in {"split_once", "repeat", "once", "hold_last"} else "split_once",
+        "queue_slot_seconds": parse_visual_float(request.form.get("visual_overlay_queue_slot_seconds", existing_config.get("queue_slot_seconds", 10)), 10, 0.25, 86400),
+        "elements": elements,
+    }
+
+    active_elements = [element for element in elements if element.get("enabled")]
+    if require_active and not active_elements:
+        raise ValueError("Ative pelo menos um elemento visual.")
+
+    return config
 
 
 def format_upload_error(error: Exception, filename: str) -> str:
@@ -3148,6 +3475,180 @@ def save_split_manual_segments(project_id: str, segments: list):
         json.dump(segments, f, ensure_ascii=False, indent=2)
 
 
+def clamp_seconds(value: float, min_value: float, max_value: float) -> float:
+    return max(min_value, min(max_value, float(value or 0)))
+
+
+def append_occurrence(occurrences: list[dict], start: float, end: float, video_duration: float):
+    start = clamp_seconds(start, 0, video_duration)
+    end = clamp_seconds(end, 0, video_duration)
+    if end - start >= 0.05:
+        occurrences.append({"start": round(start, 3), "end": round(end, 3)})
+
+
+def build_regular_visual_occurrences(element: dict, video_duration: float) -> list[dict]:
+    mode = element.get("schedule_mode") or "full_video"
+    visible_duration = clamp_seconds(element.get("duration_seconds") or 8, 0.25, video_duration)
+    occurrences = []
+
+    if mode == "full_video":
+        append_occurrence(occurrences, 0, video_duration, video_duration)
+
+    elif mode == "interval":
+        interval = clamp_seconds(element.get("interval_seconds") or visible_duration, 0.25, video_duration)
+        start = 0.0
+        while start < video_duration and len(occurrences) < VISUAL_OVERLAY_MAX_OCCURRENCES_PER_ELEMENT:
+            append_occurrence(occurrences, start, start + visible_duration, video_duration)
+            start += interval
+
+    elif mode == "even_count":
+        count = parse_visual_int(element.get("count"), 1, 1, VISUAL_OVERLAY_MAX_OCCURRENCES_PER_ELEMENT)
+        if count == 1:
+            start = max(0, (video_duration - visible_duration) / 2)
+            append_occurrence(occurrences, start, start + visible_duration, video_duration)
+        else:
+            max_start = max(0, video_duration - visible_duration)
+            spacing = max_start / (count - 1) if count > 1 else 0
+            for index in range(count):
+                start = spacing * index
+                append_occurrence(occurrences, start, start + visible_duration, video_duration)
+
+    return occurrences
+
+
+def build_queue_visual_occurrences(queue_elements: list[dict], config: dict, video_duration: float) -> dict[str, list[dict]]:
+    occurrences_by_id = {element["id"]: [] for element in queue_elements}
+    if not queue_elements:
+        return occurrences_by_id
+
+    behavior = config.get("queue_behavior") or "split_once"
+    slot_seconds = clamp_seconds(config.get("queue_slot_seconds") or 10, 0.25, video_duration)
+
+    if behavior == "split_once":
+        slot = video_duration / len(queue_elements)
+        for index, element in enumerate(queue_elements):
+            append_occurrence(occurrences_by_id[element["id"]], index * slot, (index + 1) * slot, video_duration)
+        return occurrences_by_id
+
+    start = 0.0
+    queue_index = 0
+    while start < video_duration:
+        element = queue_elements[queue_index % len(queue_elements)]
+        is_last_once_element = behavior in {"once", "hold_last"} and queue_index == len(queue_elements) - 1
+        end = video_duration if behavior == "hold_last" and is_last_once_element else start + slot_seconds
+        append_occurrence(occurrences_by_id[element["id"]], start, end, video_duration)
+        queue_index += 1
+        start += slot_seconds
+
+        if behavior in {"once", "hold_last"} and queue_index >= len(queue_elements):
+            break
+        if len(occurrences_by_id[element["id"]]) >= VISUAL_OVERLAY_MAX_OCCURRENCES_PER_ELEMENT:
+            break
+
+    return occurrences_by_id
+
+
+def build_visual_overlay_render_items(project_id: str, config: dict, video_duration: float) -> list[dict]:
+    enabled_elements = [
+        element
+        for element in config.get("elements", [])
+        if isinstance(element, dict) and element.get("enabled") and element.get("asset_filename")
+    ]
+    if not enabled_elements:
+        raise ValueError("Nenhum elemento visual ativo foi encontrado.")
+
+    enabled_elements.sort(
+        key=lambda item: (
+            parse_visual_int(item.get("layer"), 1, 1, 50),
+            parse_visual_int(item.get("queue_order"), 1, 1, 999),
+            item.get("name", ""),
+        )
+    )
+    queue_elements = sorted(
+        [element for element in enabled_elements if element.get("schedule_mode") == "queue_equal"],
+        key=lambda item: (parse_visual_int(item.get("queue_order"), 1, 1, 999), parse_visual_int(item.get("layer"), 1, 1, 50), item.get("name", "")),
+    )
+    queue_occurrences = build_queue_visual_occurrences(queue_elements, config, video_duration)
+
+    render_items = []
+    for element in enabled_elements:
+        asset_path = visual_overlay_asset_path(project_id, element.get("asset_filename", ""))
+        if not asset_path:
+            raise FileNotFoundError(f"Asset ausente: {element.get('asset_filename') or element.get('name')}")
+
+        validation = probe_visual_overlay_asset(asset_path)
+        if element.get("schedule_mode") == "queue_equal":
+            occurrences = queue_occurrences.get(element["id"], [])
+        else:
+            occurrences = build_regular_visual_occurrences(element, video_duration)
+
+        if not occurrences:
+            raise ValueError(f"Nenhuma aparição válida para o elemento {element.get('name') or asset_path.name}.")
+        if len(occurrences) > VISUAL_OVERLAY_MAX_OCCURRENCES_PER_ELEMENT:
+            raise ValueError(f"O elemento {element.get('name')} gerou aparições demais. Aumente o intervalo ou reduza a contagem.")
+
+        render_item = dict(element)
+        render_item["asset_path"] = asset_path
+        render_item["validation"] = validation
+        render_item["occurrences"] = occurrences
+        render_items.append(render_item)
+
+    return render_items
+
+
+def visual_overlay_enable_expression(occurrences: list[dict]) -> str:
+    parts = [
+        f"between(t\\,{occurrence['start']:.3f}\\,{occurrence['end']:.3f})"
+        for occurrence in occurrences
+    ]
+    return "+".join(parts) if parts else "0"
+
+
+def visual_overlay_position_expression(element: dict, video_width: int, video_height: int) -> tuple[str, str]:
+    position = element.get("position") or "top_right"
+    if position == "full_frame":
+        return "0", "0"
+
+    x_percent = parse_visual_float(element.get("x_percent"), 0, 0, 100)
+    y_percent = parse_visual_float(element.get("y_percent"), 0, 0, 100)
+    x_factor = x_percent / 100
+    y_factor = y_percent / 100
+    return f"(main_w-overlay_w)*{x_factor:.6f}", f"(main_h-overlay_h)*{y_factor:.6f}"
+
+
+def build_visual_overlay_filter_complex(render_items: list[dict], video_width: int, video_height: int) -> tuple[str, str]:
+    filter_parts = []
+    current_label = "[0:v]"
+
+    for index, element in enumerate(render_items, start=1):
+        input_index = index
+        overlay_label = f"overlay_{index}"
+        output_label = f"visual_{index}"
+        opacity = float(element.get("opacity") or 100) / 100
+
+        if element.get("position") == "full_frame":
+            scale = f"scale={max(2, video_width)}:{max(2, video_height)}"
+        else:
+            width_pixels = max(2, int(video_width * (float(element.get("width_percent") or 18) / 100)))
+            scale = f"scale={width_pixels}:-1"
+
+        overlay_chain = f"[{input_index}:v]format=rgba,{scale}"
+        if opacity < 0.999:
+            overlay_chain += f",colorchannelmixer=aa={opacity:.3f}"
+        overlay_chain += f"[{overlay_label}]"
+        filter_parts.append(overlay_chain)
+
+        x_expr, y_expr = visual_overlay_position_expression(element, video_width, video_height)
+        enable_expr = visual_overlay_enable_expression(element.get("occurrences", []))
+        filter_parts.append(
+            f"{current_label}[{overlay_label}]overlay={x_expr}:{y_expr}:enable='{enable_expr}':eof_action=pass:format=auto[{output_label}]"
+        )
+        current_label = f"[{output_label}]"
+
+    filter_parts.append(f"{current_label}format=yuv420p[vout]")
+    return ";".join(filter_parts), "[vout]"
+
+
 # Monta os segmentos do Video Splitter.
 def build_split_segments(duration: float, mode: str, fixed_seconds: int | None = None, parts: int | None = None) -> list[tuple[float, float]]:
     if not duration or duration <= 0:
@@ -3347,6 +3848,133 @@ def run_split_video_job(project_id: str):
         fail_job(project_id, "split_video", str(e))
 
 
+def run_process_visual_overlays_job(project_id: str):
+    metadata = load_metadata(project_id)
+    video_path = metadata.get("video_path", "")
+
+    try:
+        if not video_path or not Path(video_path).exists():
+            raise FileNotFoundError("vídeo ausente")
+
+        config = load_visual_overlay_config(project_id)
+        update_job(project_id, "process_visual_overlays", build_running_status("process_visual_overlays", 8, "Validando vídeo e assets..."))
+
+        media_info = probe_video_file(video_path, require_audio=False)
+        duration = float(media_info.get("duration") or 0)
+        video_width = int(media_info.get("width") or 0)
+        video_height = int(media_info.get("height") or 0)
+        if duration <= 0 or video_width <= 0 or video_height <= 0:
+            raise ValueError("não foi possível ler duração e tamanho do vídeo")
+
+        render_items = build_visual_overlay_render_items(project_id, config, duration)
+        filter_complex, output_video_label = build_visual_overlay_filter_complex(render_items, video_width, video_height)
+
+        output_dir = get_project_subdir(project_id, "Videos Finalizados")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        cuts = load_cuts_registry(project_id)
+        remaining_cuts = []
+        for cut in cuts:
+            if cut.get("source") == "visual_overlay":
+                output_name = cut.get("output_name", "").strip()
+                if output_name:
+                    output_path = output_dir / output_name
+                    if output_path.exists():
+                        output_path.unlink()
+            else:
+                remaining_cuts.append(cut)
+
+        output_base = config.get("output_name_base") or "video_com_elementos_visuais"
+        output_name = build_unique_output_name(output_dir, output_base)
+        output_file = output_dir / output_name
+
+        update_job(
+            project_id,
+            "process_visual_overlays",
+            build_running_status(
+                "process_visual_overlays",
+                25,
+                "Montando composição local...",
+                f"{len(render_items)} elemento(s) ativo(s) em {int(duration)}s de vídeo.",
+            ),
+        )
+
+        command_args = ["-y", "-i", video_path]
+        for item in render_items:
+            asset_path = str(item["asset_path"])
+            if item.get("validation", {}).get("kind") == "image":
+                command_args.extend(["-loop", "1", "-i", asset_path])
+            else:
+                command_args.extend(["-stream_loop", "-1", "-i", asset_path])
+
+        command_args.extend(
+            [
+                "-filter_complex",
+                filter_complex,
+                "-map",
+                output_video_label,
+                "-map",
+                "0:a?",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "18",
+                "-c:a",
+                "aac",
+                "-shortest",
+                "-movflags",
+                "+faststart",
+                str(output_file),
+            ]
+        )
+
+        update_job(project_id, "process_visual_overlays", build_running_status("process_visual_overlays", 45, "Renderizando vídeo com elementos...", "FFmpeg local em execução."))
+        try:
+            run_processing_command(
+                ffmpeg_command(*command_args),
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"ffmpeg falhou: {e.stderr or e.stdout or str(e)}")
+
+        if not output_file.exists():
+            raise RuntimeError("arquivo de saída não gerado")
+
+        occurrences_count = sum(len(item.get("occurrences", [])) for item in render_items)
+        generated_record = {
+            "start": "00:00:00",
+            "end": format_seconds_to_time(int(duration)),
+            "name": output_base,
+            "batch_id": datetime.now().strftime("%Y%m%d%H%M%S"),
+            "status": "processed",
+            "output_name": output_name,
+            "source": "visual_overlay",
+        }
+        save_cuts_registry(project_id, remaining_cuts + [generated_record])
+
+        metadata["task_type"] = "visual_overlay"
+        metadata["visual_overlay_configured"] = "yes"
+        metadata["status"] = f"Elementos visuais renderizados: {len(render_items)} elemento(s)"
+        metadata["duration"] = str(duration)
+        save_metadata(project_id, metadata)
+
+        update_job(
+            project_id,
+            "process_visual_overlays",
+            build_success_status(
+                "process_visual_overlays",
+                "Elementos visuais concluídos",
+                f"{output_name} foi gerado com {occurrences_count} aparição(ões).",
+            ),
+        )
+    except Exception as e:
+        fail_job(project_id, "process_visual_overlays", str(e))
+
+
 # Executa o processamento apenas do lote pendente mais recente.
 def run_process_cuts_job(project_id: str):
     metadata = load_metadata(project_id)
@@ -3527,12 +4155,23 @@ def append_selected_ai_cuts_to_registry(project_id: str):
     return batch_id, len(selected_ai_cuts) * 2
 
 
+def get_task_type_label(task_type: str) -> str:
+    return TASK_TYPE_LABELS.get(task_type, TASK_TYPE_LABELS["ai_cuts"])
+
+
 def get_home_project_stage_label(project_id: str, metadata: dict) -> str:
     task_type = metadata.get("task_type", "ai_cuts")
 
     if task_type == "video_splitter":
         if get_processed_files(project_id):
             return "Etapa 2 - Arquivos gerados"
+        return "Etapa 1 - Vídeo carregado"
+
+    if task_type == "visual_overlay":
+        if get_processed_files(project_id):
+            return "Etapa 3 - Arquivo com elementos"
+        if metadata.get("visual_overlay_configured") == "yes":
+            return "Etapa 2 - Composição configurada"
         return "Etapa 1 - Vídeo carregado"
 
     if get_processed_files(project_id):
@@ -3683,8 +4322,11 @@ def duplicate_project_with_options(source_project_id: str, options: dict) -> str
         copy_path_if_exists(get_cuts_registry_path(source_project_id), get_cuts_registry_path(new_project_id))
         copy_path_if_exists(get_cuts_txt_path(source_project_id), get_cuts_txt_path(new_project_id))
         copy_path_if_exists(get_split_manual_segments_path(source_project_id), get_split_manual_segments_path(new_project_id))
+        copy_path_if_exists(get_visual_overlay_config_path(source_project_id), get_visual_overlay_config_path(new_project_id))
+        copy_path_if_exists(get_visual_overlay_assets_dir(source_project_id), get_visual_overlay_assets_dir(new_project_id))
     else:
         new_metadata["cuts_defined"] = "no"
+        new_metadata["visual_overlay_configured"] = "no"
 
     if keep_processed_files:
         copy_path_if_exists(get_project_subdir(source_project_id, "Videos Finalizados"), get_project_subdir(new_project_id, "Videos Finalizados"))
@@ -3736,7 +4378,7 @@ def home():
                         "status": metadata.get("status", "Novo"),
                         "stage_label": get_home_project_stage_label(project_folder.name, metadata),
                         "task_type": metadata.get("task_type", "ai_cuts"),
-                        "task_label": "Video Splitter" if metadata.get("task_type") == "video_splitter" else "Cortes inteligentes com I.A",
+                        "task_label": get_task_type_label(metadata.get("task_type", "ai_cuts")),
                         "archived": archived,
                         "status_group": status_group,
                     }
@@ -4245,6 +4887,26 @@ def project_video(project_id):
     return send_file(resolved_video_path, conditional=True)
 
 
+@app.route("/visual_overlay_asset/<project_id>/<path:filename>")
+def visual_overlay_asset(project_id, filename):
+    metadata = load_metadata(project_id)
+    project_path = get_project_path(project_id)
+    asset_path = visual_overlay_asset_path(project_id, filename)
+    if not project_path.exists() or project_is_removed_from_app(metadata) or not asset_path:
+        abort(404)
+
+    try:
+        resolved_project_path = project_path.resolve()
+        resolved_asset_path = asset_path.resolve()
+    except FileNotFoundError:
+        abort(404)
+
+    if resolved_project_path != resolved_asset_path and resolved_project_path not in resolved_asset_path.parents:
+        abort(400)
+
+    return send_file(resolved_asset_path, conditional=True)
+
+
 @app.route("/open_processed_file/<project_id>/<path:filename>", methods=["POST"])
 def open_processed_file(project_id, filename):
     output_path = get_processed_file_path(project_id, filename)
@@ -4335,7 +4997,7 @@ def upload_video():
     default_project_title = Path(video_name).stem or f"Projeto {timestamp}"
     project_title = request.form.get("project_title", "").strip() or default_project_title
     task_type = request.form.get("task_type", "ai_cuts")
-    if task_type not in ("ai_cuts", "video_splitter"):
+    if task_type not in VALID_TASK_TYPES:
         task_type = "ai_cuts"
     if task_type == "ai_cuts" and not get_public_api_settings().get("ai_ok"):
         return redirect(
@@ -4418,12 +5080,13 @@ def project_detail(project_id):
     next_cut_number = get_next_cut_number(project_id)
     processed_files = get_processed_files(project_id)
     split_manual_segments = load_split_manual_segments(project_id)
+    task_type = metadata.get("task_type", "ai_cuts")
+    visual_overlay_config = build_visual_overlay_form_state(project_id)
     job_statuses = {job_type: load_job_status(get_project_path(project_id), job_type) for job_type in JOB_TYPES}
     step_elapsed = get_project_step_elapsed(job_statuses)
     total_processing_time = get_total_processing_time(job_statuses)
     technical_log_text = read_project_technical_log(project_id)
     onboarding = load_app_config().get("onboarding", {})
-    task_type = metadata.get("task_type", "ai_cuts")
 
     return render_template(
         "cuts.html",
@@ -4448,13 +5111,14 @@ def project_detail(project_id):
         next_cut_number=next_cut_number,
         job_statuses=job_statuses,
         split_manual_segments=split_manual_segments,
+        visual_overlay_config=visual_overlay_config,
         step_elapsed=step_elapsed,
         total_processing_time=total_processing_time,
         revised_transcript_exists=revised_transcript_exists,
         technical_log_text=technical_log_text,
         api_settings=get_public_api_settings(),
         project_stage_label=get_home_project_stage_label(project_id, metadata),
-        show_ai_cuts_onboarding=task_type != "video_splitter" and not bool(onboarding.get("ai_cuts_tour_seen")),
+        show_ai_cuts_onboarding=task_type == "ai_cuts" and not bool(onboarding.get("ai_cuts_tour_seen")),
         show_video_splitter_onboarding=task_type == "video_splitter" and not bool(onboarding.get("video_splitter_tour_seen")),
     )
 
@@ -4614,6 +5278,82 @@ def split_video(project_id):
         if not started:
             return jsonify({"ok": False, "message": "Já existe uma divisão em andamento."}), 409
         return jsonify({"ok": True, "job_type": "split_video"})
+
+    scroll_y = request.form.get("scroll_y", "")
+    if scroll_y:
+        return redirect(url_for("project_detail", project_id=project_id, scroll_y=scroll_y))
+    return redirect(url_for("project_detail", project_id=project_id))
+
+
+@app.route("/save_visual_overlays/<project_id>", methods=["POST"])
+def save_visual_overlays(project_id):
+    try:
+        metadata = load_metadata(project_id)
+        if not get_project_path(project_id).exists() or project_is_removed_from_app(metadata):
+            abort(404)
+
+        config = parse_visual_overlay_form(project_id, require_active=False)
+        save_visual_overlay_config(project_id, config)
+
+        active_count = len([element for element in config.get("elements", []) if element.get("enabled") and element.get("asset_filename")])
+        metadata["task_type"] = "visual_overlay"
+        metadata["visual_overlay_configured"] = "yes" if active_count else "no"
+        metadata["status"] = f"Composição visual salva: {active_count} elemento(s) ativo(s)"
+        save_metadata(project_id, metadata)
+
+        if is_ajax_request():
+            response_elements = []
+            for element in config.get("elements", []):
+                asset_filename = element.get("asset_filename", "")
+                response_elements.append({
+                    "id": element.get("id", ""),
+                    "asset_filename": asset_filename,
+                    "asset_kind": element.get("asset_kind", ""),
+                    "asset_url": url_for("visual_overlay_asset", project_id=project_id, filename=asset_filename) if asset_filename else "",
+                })
+            return jsonify({
+                "ok": True,
+                "message": "Composição salva.",
+                "active_count": active_count,
+                "elements": response_elements,
+            })
+        return redirect(url_for("project_detail", project_id=project_id))
+    except Exception as e:
+        if is_ajax_request():
+            return jsonify({"ok": False, "message": str(e)}), 400
+        metadata = load_metadata(project_id)
+        metadata["status"] = str(e)
+        save_metadata(project_id, metadata)
+        return redirect(url_for("project_detail", project_id=project_id))
+
+
+@app.route("/process_visual_overlays/<project_id>", methods=["POST"])
+def process_visual_overlays(project_id):
+    try:
+        metadata = load_metadata(project_id)
+        if not get_project_path(project_id).exists() or project_is_removed_from_app(metadata):
+            abort(404)
+
+        config = parse_visual_overlay_form(project_id, require_active=True)
+        save_visual_overlay_config(project_id, config)
+        metadata["task_type"] = "visual_overlay"
+        metadata["visual_overlay_configured"] = "yes"
+        metadata["status"] = "Renderização de elementos visuais iniciada"
+        save_metadata(project_id, metadata)
+    except Exception as e:
+        if is_ajax_request():
+            return jsonify({"ok": False, "message": str(e)}), 400
+        metadata = load_metadata(project_id)
+        metadata["status"] = str(e)
+        save_metadata(project_id, metadata)
+        return redirect(url_for("project_detail", project_id=project_id))
+
+    started = start_background_job(project_id, "process_visual_overlays", run_process_visual_overlays_job)
+
+    if is_ajax_request():
+        if not started:
+            return jsonify({"ok": False, "message": "Já existe uma renderização de elementos visuais em andamento."}), 409
+        return jsonify({"ok": True, "job_type": "process_visual_overlays"})
 
     scroll_y = request.form.get("scroll_y", "")
     if scroll_y:

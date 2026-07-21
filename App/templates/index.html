@@ -72,7 +72,7 @@
           <span class="metric-label">projetos</span>
         </div>
         <div class="metric-card">
-          <span class="metric-value">2</span>
+          <span class="metric-value">3</span>
           <span class="metric-label">fluxos</span>
         </div>
         <div class="metric-card">
@@ -154,6 +154,14 @@
                 <span class="radio-description">Divide vídeos por duração, número de partes, presets sociais ou trechos manuais.</span>
               </span>
             </label>
+
+            <label class="radio-card">
+              <input type="radio" name="task_type" value="visual_overlay">
+              <span>
+                <span class="radio-title">Elementos visuais</span>
+                <span class="radio-description">Monte PNGs, marcas d'água e arquivos com alpha em uma fila de sobreposição local.</span>
+              </span>
+            </label>
           </div>
 
           <div data-tour-target="upload">
@@ -185,6 +193,7 @@
             <option value="">Todas as tarefas</option>
             <option value="ai_cuts">Cortes inteligentes com I.A</option>
             <option value="video_splitter">Video Splitter</option>
+            <option value="visual_overlay">Elementos visuais</option>
           </select>
           <select data-project-status-filter aria-label="Filtrar por status">
             <option value="">Todos os status</option>

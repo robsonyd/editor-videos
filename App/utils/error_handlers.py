@@ -5,6 +5,7 @@ def build_error_title(job_type: str) -> str:
         "suggest_cuts": "Erro ao sugerir cortes com IA",
         "process_cuts": "Erro ao processar cortes",
         "split_video": "Erro no Video Splitter",
+        "process_visual_overlays": "Erro nos elementos visuais",
     }
     return titles.get(job_type, "Erro no processamento")
 
@@ -55,6 +56,14 @@ ERROR_MAP = {
         ("adicione pelo menos um trecho manual", "Nenhum trecho manual foi definido.", "Adicione pelo menos um trecho antes de processar.", False),
         ("ffmpeg", "O FFmpeg falhou ao dividir o vídeo.", f"Confira se o vídeo bruto ainda existe e se os tempos escolhidos são válidos. {FFMPEG_RECOVERY}", True),
         ("arquivo de saída não gerado", "A divisão rodou, mas o arquivo final não apareceu.", "Confira espaço em disco e permissão de escrita na pasta do projeto.", True),
+    ],
+    "process_visual_overlays": [
+        ("nenhum elemento visual ativo", "Nenhum elemento visual ativo.", "Ative pelo menos um elemento, escolha um PNG ou vídeo com alpha e tente processar novamente.", False),
+        ("escolha um arquivo visual", "Asset visual ausente.", "Escolha um arquivo para cada elemento ativo antes de renderizar.", False),
+        ("asset visual não suportado", "Formato de asset não suportado.", "Use PNG para elementos fixos ou MOV/WebM/GIF/APNG/MKV/AVI para elementos animados com alpha.", False),
+        ("asset ausente", "Um asset visual não foi encontrado.", "Confira se o arquivo ainda existe na pasta do projeto ou selecione o asset novamente.", False),
+        ("ffmpeg", "O FFmpeg falhou ao queimar os elementos visuais.", f"Confira se os assets abrem normalmente e se possuem codecs compatíveis. {FFMPEG_RECOVERY}", True),
+        ("arquivo de saída não gerado", "A renderização rodou, mas o arquivo final não apareceu.", "Confira espaço em disco e permissão de escrita na pasta do projeto.", True),
     ],
 }
 

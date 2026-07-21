@@ -35,7 +35,8 @@
     identify_speakers: 'Mapear participantes',
     suggest_cuts: 'Sugerir cortes com IA',
     process_cuts: 'Processar cortes',
-    split_video: 'Video Splitter'
+    split_video: 'Video Splitter',
+    process_visual_overlays: 'Elementos visuais'
   };
 
   const LONG_RUNNING_HINTS = {
@@ -43,7 +44,8 @@
     identify_speakers: 'Mapeamento de participantes é pesado. O percentual pode ficar parado por alguns minutos sem significar travamento.',
     suggest_cuts: 'A IA está analisando a transcrição e pode demorar mais em episódios longos.',
     process_cuts: 'O FFmpeg está renderizando os arquivos selecionados. Evite fechar esta aba durante a saída dos vídeos.',
-    split_video: 'O FFmpeg está gerando as partes do vídeo. O tempo varia conforme duração e quantidade de trechos.'
+    split_video: 'O FFmpeg está gerando as partes do vídeo. O tempo varia conforme duração e quantidade de trechos.',
+    process_visual_overlays: 'O FFmpeg está queimando os elementos visuais localmente. Vídeos com alpha e muitos agendamentos podem levar mais tempo.'
   };
 
   function now() {

@@ -761,6 +761,8 @@
         <span class="nav-context">
           {% if metadata.get("task_type", "ai_cuts") == "video_splitter" %}
             Video Splitter
+          {% elif metadata.get("task_type", "ai_cuts") == "visual_overlay" %}
+            Elementos visuais
           {% else %}
             Cortes inteligentes com I.A
           {% endif %}
@@ -772,7 +774,7 @@
   </header>
 
   <main class="app-main">
-    <section class="project-console{% if metadata.get("task_type", "ai_cuts") == "video_splitter" %} is-splitter-console{% else %} is-ai-console{% endif %}">
+    <section class="project-console{% if metadata.get("task_type", "ai_cuts") == "video_splitter" %} is-splitter-console{% elif metadata.get("task_type", "ai_cuts") == "visual_overlay" %} is-overlay-console{% else %} is-ai-console{% endif %}">
       <div class="project-console-copy">
         <div class="project-file-line">
           <span>Arquivo original:</span>
@@ -808,8 +810,1039 @@
       </div>
     {% endif %}
 
+  {% if metadata.get("task_type", "ai_cuts") == "visual_overlay" %}
+    <div class="workspace-grid overlay-workspace">
+      <aside class="workspace-rail">
+        <span class="section-kicker">Fluxo</span>
+        <h3>Elementos visuais</h3>
+        <a href="#overlay-composer">Composição</a>
+        <a href="#overlay-schedule">Agenda</a>
+        <a href="#overlay-output">Exportação</a>
+        <a href="#overlay-roadmap">Roadmap</a>
+        <ul class="rail-meta-list" aria-label="Informações do projeto">
+          <li><span>Status</span><strong>{{ metadata.get("status", "") }}</strong></li>
+          {% if metadata.get("duration") %}
+            <li><span>Duração</span><strong>{{ metadata.get("duration") }}s</strong></li>
+          {% endif %}
+          <li><span>Motor</span><strong>FFmpeg local</strong></li>
+          <li><span>Alpha</span><strong>PNG, MOV, WebM</strong></li>
+        </ul>
+        <details class="technical-log-panel rail-technical-log">
+          <summary>
+            <span>Log técnico</span>
+            <small>{% if technical_log_text %}Atualizado nos processamentos{% else %}Sem eventos ainda{% endif %}</small>
+          </summary>
+          <div class="technical-log-body">
+            <pre data-technical-log>{{ technical_log_text or "O log técnico será criado quando uma etapa começar a processar." }}</pre>
+            <button type="button" class="secondary-button" data-copy-technical-log>Copiar log</button>
+          </div>
+        </details>
+      </aside>
 
-  {% if metadata.get("task_type", "ai_cuts") == "video_splitter" %}
+      <div class="workspace-main overlay-main">
+        <form id="visual-overlay-form"
+              class="visual-overlay-form"
+              action="{{ url_for('process_visual_overlays', project_id=project_id) }}"
+              method="POST"
+              enctype="multipart/form-data"
+              data-progress-job="true"
+              data-job-type="process_visual_overlays"
+              data-project-id="{{ project_id }}"
+              data-keep-scroll="true"
+              data-save-url="{{ url_for('save_visual_overlays', project_id=project_id) }}">
+          <input type="hidden" name="scroll_y" value="0">
+
+          <section class="box overlay-composer" id="overlay-composer">
+            <div class="section-header">
+              <div>
+                <span class="section-kicker">Composição</span>
+                <h2>Elementos sobre o vídeo</h2>
+                <p class="hint">Salve PNGs e vídeos com alpha no projeto e renderize tudo localmente com FFmpeg.</p>
+              </div>
+              <span class="chip is-ok">Funcional local</span>
+            </div>
+
+            <div class="overlay-studio">
+              <div class="overlay-preview-panel">
+                <div class="overlay-preview-stage" data-overlay-preview-stage data-position="top_right">
+                  <video class="overlay-preview-video" controls preload="metadata" src="{{ url_for('project_video', project_id=project_id) }}">
+                    Seu navegador não conseguiu carregar o preview do vídeo.
+                  </video>
+                  <div class="overlay-preview-layer" data-overlay-preview-layer aria-hidden="true">
+                    <div class="overlay-real-layer" data-overlay-real-layer hidden></div>
+                    <div class="overlay-preview-empty" data-overlay-preview-empty>Selecione um arquivo visual em um elemento para pré-visualizar.</div>
+                  </div>
+                </div>
+                <div class="overlay-preview-meta">
+                  <span>{{ metadata.get("video_name", "Vídeo bruto") }}</span>
+                  <span>{% if metadata.get("duration") %}{{ metadata.get("duration")|float|round|int }}s{% else %}--:--{% endif %}</span>
+                </div>
+              </div>
+
+              <div class="overlay-controls-panel">
+                <div class="overlay-control-block">
+                  <span class="section-kicker">Saída e fila</span>
+                  <div class="overlay-control-grid">
+                    <label>
+                      Nome do arquivo final
+                      <input type="text" name="visual_overlay_output_name" value="{{ visual_overlay_config.get('output_name_base', 'video_com_elementos_visuais') }}">
+                    </label>
+                    <label>
+                      Comportamento da fila
+                      <select name="visual_overlay_queue_behavior">
+                        <option value="split_once" {% if visual_overlay_config.get('queue_behavior') == 'split_once' %}selected{% endif %}>Dividir vídeo inteiro uma vez</option>
+                        <option value="repeat" {% if visual_overlay_config.get('queue_behavior') == 'repeat' %}selected{% endif %}>Repetir por slots até o fim</option>
+                        <option value="once" {% if visual_overlay_config.get('queue_behavior') == 'once' %}selected{% endif %}>Executar uma vez e parar</option>
+                        <option value="hold_last" {% if visual_overlay_config.get('queue_behavior') == 'hold_last' %}selected{% endif %}>Manter o último até o fim</option>
+                      </select>
+                    </label>
+                    <label>
+                      Slot da fila em segundos
+                      <input type="number" name="visual_overlay_queue_slot_seconds" value="{{ visual_overlay_config.get('queue_slot_seconds', 10) }}" min="0.25" step="0.25">
+                    </label>
+                    <label>
+                      Assets aceitos
+                      <input type="text" value="PNG, MOV, WebM, GIF, APNG, MKV, AVI" readonly>
+                    </label>
+                  </div>
+                  <p class="small-hint">Tudo fica salvo dentro da pasta do projeto, em Dados de Processamento / Elementos Visuais.</p>
+                  <p class="status-ok overlay-save-status" data-overlay-save-status hidden>Composição salva.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="box overlay-schedule" id="overlay-schedule">
+            <div class="section-header">
+              <div>
+                <span class="section-kicker">Elementos e agenda</span>
+                <h2>Fila de elementos</h2>
+                <p class="hint">Ative as linhas que serão queimadas no vídeo final. Cada linha pode usar um modo de agenda diferente.</p>
+              </div>
+              <span class="chip is-neutral">Dinâmico</span>
+            </div>
+
+            <div class="overlay-elements-toolbar">
+              <button type="button" class="secondary-button" data-overlay-add>Adicionar elemento</button>
+              <span class="chip is-neutral" data-overlay-count>{{ visual_overlay_config.get('elements', [])|length }} elemento(s)</span>
+            </div>
+
+            <div class="overlay-editor-list" data-overlay-list data-next-index="{{ visual_overlay_config.get('elements', [])|length }}">
+              {% for element in visual_overlay_config.get('elements', []) %}
+                <details class="overlay-editor-card{% if element.get('enabled') %} is-active{% endif %}" data-overlay-row data-asset-url="{% if element.get('asset_filename') %}{{ url_for('visual_overlay_asset', project_id=project_id, filename=element.get('asset_filename')) }}{% endif %}" data-asset-kind="{{ element.get('asset_kind', '') }}" {% if loop.first %}open{% endif %}>
+                  <summary class="overlay-editor-summary">
+                    <span class="overlay-summary-main">
+                      <span class="overlay-element-badge" data-overlay-number>{{ loop.index }}</span>
+                      <span>
+                        <strong data-overlay-summary-name>{{ element.get('name', '') or 'Elemento ' ~ loop.index }}</strong>
+                        <small data-overlay-summary-meta>{{ element.get('asset_filename') or 'Sem asset selecionado' }} · {{ element.get('schedule_mode', 'full_video') }}</small>
+                      </span>
+                    </span>
+                    {% if element.get('asset_filename') %}
+                      <span class="status-tag {% if element.get('validation', {}).get('has_alpha') %}is-processed{% else %}is-pending{% endif %}" data-overlay-status>
+                        {% if element.get('validation', {}).get('has_alpha') %}Alpha OK{% else %}Asset salvo{% endif %}
+                      </span>
+                    {% else %}
+                      <span class="status-tag is-neutral" data-overlay-status>Sem asset</span>
+                    {% endif %}
+                  </summary>
+
+                  <div class="overlay-editor-body">
+                    <div class="overlay-editor-head">
+                      <label class="overlay-enable">
+                        <input type="checkbox" name="overlay_enabled[]" value="{{ element.get('id') }}" {% if element.get('enabled') %}checked{% endif %} data-overlay-enabled>
+                        <span>Ativar este elemento no render</span>
+                      </label>
+                      <button type="button" class="secondary-button overlay-remove-button" data-overlay-remove>Remover</button>
+                    </div>
+
+                    <input type="hidden" name="overlay_id[]" value="{{ element.get('id') }}" data-overlay-id>
+                    <input type="hidden" name="overlay_existing_asset[]" value="{{ element.get('asset_filename', '') }}">
+
+                    <div class="overlay-asset-row">
+                      <label>
+                        Arquivo visual
+                        <input type="file" name="overlay_asset_{{ loop.index0 }}" accept=".png,.apng,.gif,.mov,.m4v,.webm,.mkv,.avi" data-overlay-file>
+                      </label>
+                      <div class="overlay-asset-state">
+                        <strong data-overlay-selected-file>{{ element.get('asset_filename') or 'Nenhum asset salvo' }}</strong>
+                        <small>{{ element.get('validation', {}).get('alpha_note') or 'PNG pode ser fixo; MOV/WebM/GIF/APNG entram como elemento animado.' }}</small>
+                      </div>
+                    </div>
+
+                    <div class="overlay-field-grid">
+                      <label>
+                        Nome
+                        <input type="text" name="overlay_name[]" value="{{ element.get('name', '') }}" data-overlay-name>
+                      </label>
+                      <label>
+                        Posição rápida
+                        <select name="overlay_position[]" data-overlay-position>
+                          <option value="top_right" {% if element.get('position') == 'top_right' %}selected{% endif %}>Superior direita</option>
+                          <option value="top_left" {% if element.get('position') == 'top_left' %}selected{% endif %}>Superior esquerda</option>
+                          <option value="bottom_right" {% if element.get('position') == 'bottom_right' %}selected{% endif %}>Inferior direita</option>
+                          <option value="bottom_left" {% if element.get('position') == 'bottom_left' %}selected{% endif %}>Inferior esquerda</option>
+                          <option value="center" {% if element.get('position') == 'center' %}selected{% endif %}>Centro</option>
+                          <option value="full_frame" {% if element.get('position') == 'full_frame' %}selected{% endif %}>Frame completo</option>
+                        </select>
+                      </label>
+                      <label>
+                        Agenda
+                        <select name="overlay_schedule_mode[]" data-overlay-schedule>
+                          <option value="full_video" {% if element.get('schedule_mode') == 'full_video' %}selected{% endif %}>Vídeo inteiro</option>
+                          <option value="interval" {% if element.get('schedule_mode') == 'interval' %}selected{% endif %}>A cada X segundos</option>
+                          <option value="even_count" {% if element.get('schedule_mode') == 'even_count' %}selected{% endif %}>N vezes espaçado</option>
+                          <option value="queue_equal" {% if element.get('schedule_mode') == 'queue_equal' %}selected{% endif %}>Fila proporcional</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <div class="overlay-live-controls" aria-label="Transformação do elemento ativo">
+                      <label class="overlay-slider-field">
+                        <span><b>Tamanho</b><output data-overlay-width-output>{{ element.get('width_percent', 18) }}%</output></span>
+                        <input type="range" name="overlay_width_preview[]" value="{{ element.get('width_percent', 18) }}" min="1" max="100" step="1" data-overlay-width-range>
+                        <input type="number" name="overlay_width_percent[]" value="{{ element.get('width_percent', 18) }}" min="1" max="100" step="1" data-overlay-width>
+                      </label>
+                      <label class="overlay-slider-field">
+                        <span><b>Posição X</b><output data-overlay-x-output>{{ element.get('x_percent', 100) }}%</output></span>
+                        <input type="range" name="overlay_x_preview[]" value="{{ element.get('x_percent', 100) }}" min="0" max="100" step="1" data-overlay-x-range>
+                        <input type="number" name="overlay_x_percent[]" value="{{ element.get('x_percent', 100) }}" min="0" max="100" step="1" data-overlay-x>
+                      </label>
+                      <label class="overlay-slider-field">
+                        <span><b>Posição Y</b><output data-overlay-y-output>{{ element.get('y_percent', 0) }}%</output></span>
+                        <input type="range" name="overlay_y_preview[]" value="{{ element.get('y_percent', 0) }}" min="0" max="100" step="1" data-overlay-y-range>
+                        <input type="number" name="overlay_y_percent[]" value="{{ element.get('y_percent', 0) }}" min="0" max="100" step="1" data-overlay-y>
+                      </label>
+                      <label class="overlay-slider-field">
+                        <span><b>Opacidade</b><output data-overlay-opacity-output>{{ element.get('opacity', 100) }}%</output></span>
+                        <input type="range" name="overlay_opacity_preview[]" value="{{ element.get('opacity', 100) }}" min="0" max="100" step="1" data-overlay-opacity-range>
+                        <input type="number" name="overlay_opacity[]" value="{{ element.get('opacity', 100) }}" min="0" max="100" step="5" data-overlay-opacity>
+                      </label>
+                    </div>
+
+                    <details class="overlay-advanced-controls">
+                      <summary>Tempo e fila</summary>
+                      <div class="overlay-field-grid is-advanced">
+                        <label>Duração <input type="number" name="overlay_duration_seconds[]" value="{{ element.get('duration_seconds', 8) }}" min="0.25" step="0.25"></label>
+                        <label>Intervalo <input type="number" name="overlay_interval_seconds[]" value="{{ element.get('interval_seconds', 10) }}" min="0.25" step="0.25"></label>
+                        <label>Vezes <input type="number" name="overlay_count[]" value="{{ element.get('count', 3) }}" min="1" step="1"></label>
+                        <label>Camada <input type="number" name="overlay_layer[]" value="{{ element.get('layer', loop.index) }}" min="1" max="50" step="1" data-overlay-layer></label>
+                        <label>Ordem na fila <input type="number" name="overlay_queue_order[]" value="{{ element.get('queue_order', loop.index) }}" min="1" max="999" step="1" data-overlay-queue-order></label>
+                      </div>
+                    </details>
+                  </div>
+                </details>
+              {% endfor %}
+            </div>
+
+            <div class="empty-state overlay-empty-state" data-overlay-empty {% if visual_overlay_config.get('elements', []) %}hidden{% endif %}>
+              <strong>Nenhum elemento visual.</strong>
+              <span>Adicione um elemento para começar a montar a composição.</span>
+            </div>
+
+            <template data-overlay-template>
+              <details class="overlay-editor-card is-active" data-overlay-row data-asset-url="" data-asset-kind="" open>
+                <summary class="overlay-editor-summary">
+                  <span class="overlay-summary-main">
+                    <span class="overlay-element-badge" data-overlay-number>__NUMBER__</span>
+                    <span>
+                      <strong data-overlay-summary-name>Elemento __NUMBER__</strong>
+                      <small data-overlay-summary-meta>Sem asset selecionado · full_video</small>
+                    </span>
+                  </span>
+                  <span class="status-tag is-neutral" data-overlay-status>Sem asset</span>
+                </summary>
+                <div class="overlay-editor-body">
+                  <div class="overlay-editor-head">
+                    <label class="overlay-enable">
+                      <input type="checkbox" name="overlay_enabled[]" value="__ID__" checked data-overlay-enabled>
+                      <span>Ativar este elemento no render</span>
+                    </label>
+                    <button type="button" class="secondary-button overlay-remove-button" data-overlay-remove>Remover</button>
+                  </div>
+                  <input type="hidden" name="overlay_id[]" value="__ID__" data-overlay-id>
+                  <input type="hidden" name="overlay_existing_asset[]" value="">
+                  <div class="overlay-asset-row">
+                    <label>
+                      Arquivo visual
+                      <input type="file" name="overlay_asset___ZERO__" accept=".png,.apng,.gif,.mov,.m4v,.webm,.mkv,.avi" data-overlay-file>
+                    </label>
+                    <div class="overlay-asset-state">
+                      <strong data-overlay-selected-file>Nenhum asset salvo</strong>
+                      <small>PNG pode ser fixo; MOV/WebM/GIF/APNG entram como elemento animado.</small>
+                    </div>
+                  </div>
+                  <div class="overlay-field-grid">
+                    <label>
+                      Nome
+                      <input type="text" name="overlay_name[]" value="Elemento __NUMBER__" data-overlay-name>
+                    </label>
+                    <label>
+                      Posição
+                      <select name="overlay_position[]" data-overlay-position>
+                        <option value="top_right" selected>Superior direita</option>
+                        <option value="top_left">Superior esquerda</option>
+                        <option value="bottom_right">Inferior direita</option>
+                        <option value="bottom_left">Inferior esquerda</option>
+                        <option value="center">Centro</option>
+                        <option value="full_frame">Frame completo</option>
+                      </select>
+                    </label>
+                    <label>
+                      Agenda
+                      <select name="overlay_schedule_mode[]" data-overlay-schedule>
+                        <option value="full_video" selected>Vídeo inteiro</option>
+                        <option value="interval">A cada X segundos</option>
+                        <option value="even_count">N vezes espaçado</option>
+                        <option value="queue_equal">Fila proporcional</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div class="overlay-live-controls" aria-label="Transformação do elemento ativo">
+                    <label class="overlay-slider-field">
+                      <span><b>Tamanho</b><output data-overlay-width-output>18%</output></span>
+                      <input type="range" name="overlay_width_preview[]" value="18" min="1" max="100" step="1" data-overlay-width-range>
+                      <input type="number" name="overlay_width_percent[]" value="18" min="1" max="100" step="1" data-overlay-width>
+                    </label>
+                    <label class="overlay-slider-field">
+                      <span><b>Posição X</b><output data-overlay-x-output>100%</output></span>
+                      <input type="range" name="overlay_x_preview[]" value="100" min="0" max="100" step="1" data-overlay-x-range>
+                      <input type="number" name="overlay_x_percent[]" value="100" min="0" max="100" step="1" data-overlay-x>
+                    </label>
+                    <label class="overlay-slider-field">
+                      <span><b>Posição Y</b><output data-overlay-y-output>0%</output></span>
+                      <input type="range" name="overlay_y_preview[]" value="0" min="0" max="100" step="1" data-overlay-y-range>
+                      <input type="number" name="overlay_y_percent[]" value="0" min="0" max="100" step="1" data-overlay-y>
+                    </label>
+                    <label class="overlay-slider-field">
+                      <span><b>Opacidade</b><output data-overlay-opacity-output>100%</output></span>
+                      <input type="range" name="overlay_opacity_preview[]" value="100" min="0" max="100" step="1" data-overlay-opacity-range>
+                      <input type="number" name="overlay_opacity[]" value="100" min="0" max="100" step="5" data-overlay-opacity>
+                    </label>
+                  </div>
+
+                  <details class="overlay-advanced-controls">
+                    <summary>Tempo e fila</summary>
+                    <div class="overlay-field-grid is-advanced">
+                      <label>Duração <input type="number" name="overlay_duration_seconds[]" value="8" min="0.25" step="0.25"></label>
+                      <label>Intervalo <input type="number" name="overlay_interval_seconds[]" value="10" min="0.25" step="0.25"></label>
+                      <label>Vezes <input type="number" name="overlay_count[]" value="3" min="1" step="1"></label>
+                      <label>Camada <input type="number" name="overlay_layer[]" value="__NUMBER__" min="1" max="50" step="1" data-overlay-layer></label>
+                      <label>Ordem na fila <input type="number" name="overlay_queue_order[]" value="__NUMBER__" min="1" max="999" step="1" data-overlay-queue-order></label>
+                    </div>
+                  </details>
+                </div>
+              </details>
+            </template>
+
+            <div class="overlay-timeline-preview" aria-label="Linha do tempo de exemplo">
+              <div class="overlay-timeline-head">
+                <span>00:00</span>
+                <strong>Exemplo de agenda</strong>
+                <span>{% if metadata.get("duration") %}{{ metadata.get("duration")|float|round|int }}s{% else %}fim{% endif %}</span>
+              </div>
+              <div class="overlay-timeline-track">
+                <span class="overlay-timeline-segment is-logo" style="--start: 0%; --width: 100%;"></span>
+                <span class="overlay-timeline-segment is-lower" style="--start: 14%; --width: 13%;"></span>
+                <span class="overlay-timeline-segment is-lower" style="--start: 48%; --width: 13%;"></span>
+                <span class="overlay-timeline-segment is-lower" style="--start: 82%; --width: 13%;"></span>
+                <span class="overlay-timeline-segment is-score" style="--start: 30%; --width: 9%;"></span>
+                <span class="overlay-timeline-segment is-score" style="--start: 62%; --width: 9%;"></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="box overlay-output" id="overlay-output">
+            <div class="section-header">
+              <div>
+                <span class="section-kicker">Exportação</span>
+                <h2>Render local</h2>
+                <p class="hint">Salva a composição e queima os elementos no vídeo final com FFmpeg local.</p>
+              </div>
+            </div>
+
+            <div class="overlay-export-grid">
+              <div class="summary-card">
+                <span class="summary-label">Formato de saída</span>
+                <span class="summary-value">MP4 H.264 com áudio AAC</span>
+              </div>
+              <div class="summary-card">
+                <span class="summary-label">Processamento</span>
+                <span class="summary-value">100% local, sem nuvem</span>
+              </div>
+              <div class="summary-card">
+                <span class="summary-label">Agendas</span>
+                <span class="summary-value">Vídeo inteiro, intervalo, N vezes e fila</span>
+              </div>
+            </div>
+
+            <div class="actions-row overlay-output-actions">
+              <button type="button" class="secondary-button" data-overlay-save>Salvar composição</button>
+              <button type="submit">Processar vídeo com elementos</button>
+            </div>
+          </section>
+        </form>
+
+        <form action="{{ url_for('open_project_folder', project_id=project_id) }}" method="POST" class="overlay-folder-form">
+          <button type="submit" class="secondary-button">Abrir pasta do projeto</button>
+        </form>
+
+        <section class="box overlay-roadmap" id="overlay-roadmap">
+          <div class="section-header">
+            <div>
+              <span class="section-kicker">Roadmap</span>
+              <h2>Fases da ferramenta</h2>
+            </div>
+          </div>
+          <div class="overlay-roadmap-grid">
+            <article class="overlay-roadmap-step is-done">
+              <strong>1. Interface</strong>
+              <span>Tela, fluxo, campos, preview e estados visuais.</span>
+            </article>
+            <article class="overlay-roadmap-step is-done">
+              <strong>2. Configuração</strong>
+              <span>Salvar elementos e agenda em JSON no projeto.</span>
+            </article>
+            <article class="overlay-roadmap-step is-done">
+              <strong>3. Validação</strong>
+              <span>Checar formato, tamanho, codec e alpha provável com FFprobe.</span>
+            </article>
+            <article class="overlay-roadmap-step is-current">
+              <strong>4-5. Render e agenda</strong>
+              <span>Gerar filter_complex local para PNG, alpha video e modos inteligentes.</span>
+            </article>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        const previewStage = document.querySelector('[data-overlay-preview-stage]');
+        const realLayer = document.querySelector('[data-overlay-real-layer]');
+        const previewEmpty = document.querySelector('[data-overlay-preview-empty]');
+        const overlayForm = document.getElementById('visual-overlay-form');
+        const overlayList = document.querySelector('[data-overlay-list]');
+        const overlayTemplate = document.querySelector('[data-overlay-template]');
+        const addButton = document.querySelector('[data-overlay-add]');
+        const countBadge = document.querySelector('[data-overlay-count]');
+        const emptyState = document.querySelector('[data-overlay-empty]');
+        const saveButton = document.querySelector('[data-overlay-save]');
+        const saveStatus = document.querySelector('[data-overlay-save-status]');
+        const objectUrls = new WeakMap();
+        let activePreviewRow = null;
+        let dragState = null;
+
+        const scheduleLabels = {
+          full_video: 'Vídeo inteiro',
+          interval: 'A cada X segundos',
+          even_count: 'N vezes espaçado',
+          queue_equal: 'Fila proporcional'
+        };
+
+        const quickPositions = {
+          top_right: { x: 100, y: 0 },
+          top_left: { x: 0, y: 0 },
+          bottom_right: { x: 100, y: 100 },
+          bottom_left: { x: 0, y: 100 },
+          center: { x: 50, y: 50 },
+          full_frame: { x: 0, y: 0, width: 100 }
+        };
+
+        const imagePreviewExtensions = new Set(['.png', '.apng', '.gif']);
+        const videoPreviewExtensions = new Set(['.mov', '.m4v', '.webm', '.mkv', '.avi']);
+
+        function overlayRows() {
+          return overlayList ? Array.from(overlayList.querySelectorAll('[data-overlay-row]')) : [];
+        }
+
+        function extensionFromName(name) {
+          const cleanName = String(name || '').split('?')[0].toLowerCase();
+          const match = cleanName.match(/\.[a-z0-9]+$/);
+          return match ? match[0] : '';
+        }
+
+        function assetKindFromName(name, fallbackKind) {
+          const extension = extensionFromName(name);
+          if (imagePreviewExtensions.has(extension)) return 'image';
+          if (videoPreviewExtensions.has(extension)) return 'video';
+          return fallbackKind || '';
+        }
+
+        function readNumber(control, fallbackValue, minValue, maxValue) {
+          const number = Number.parseFloat(control ? String(control.value).replace(',', '.') : '');
+          if (!Number.isFinite(number)) return fallbackValue;
+          return Math.max(minValue, Math.min(maxValue, number));
+        }
+
+        function setControlValue(control, value) {
+          if (!control) return;
+          control.value = String(Math.round(Number(value) * 1000) / 1000);
+        }
+
+        function clampPercent(value) {
+          const number = Number.parseFloat(value);
+          if (!Number.isFinite(number)) return 0;
+          return Math.max(0, Math.min(100, number));
+        }
+
+        function formatPercent(value) {
+          const rounded = Math.round(Number(value) * 10) / 10;
+          return `${Number.isFinite(rounded) ? rounded : 0}%`;
+        }
+
+        function updatePreviewOutputs(row) {
+          if (!row) return;
+          const width = readNumber(row.querySelector('[data-overlay-width]'), 18, 1, 100);
+          const opacity = readNumber(row.querySelector('[data-overlay-opacity]'), 100, 0, 100);
+          const x = readNumber(row.querySelector('[data-overlay-x]'), 100, 0, 100);
+          const y = readNumber(row.querySelector('[data-overlay-y]'), 0, 0, 100);
+          const widthOutput = row.querySelector('[data-overlay-width-output]');
+          const opacityOutput = row.querySelector('[data-overlay-opacity-output]');
+          const xOutput = row.querySelector('[data-overlay-x-output]');
+          const yOutput = row.querySelector('[data-overlay-y-output]');
+          if (widthOutput) widthOutput.textContent = formatPercent(width);
+          if (opacityOutput) opacityOutput.textContent = formatPercent(opacity);
+          if (xOutput) xOutput.textContent = formatPercent(x);
+          if (yOutput) yOutput.textContent = formatPercent(y);
+        }
+
+        function syncControlPair(primary, secondary, fallbackValue, minValue, maxValue) {
+          if (!primary && !secondary) return fallbackValue;
+          const source = primary || secondary;
+          const value = readNumber(source, fallbackValue, minValue, maxValue);
+          setControlValue(primary, value);
+          setControlValue(secondary, value);
+          return value;
+        }
+
+        function syncPreviewControls(row) {
+          if (!row) return;
+          syncControlPair(row.querySelector('[data-overlay-width]'), row.querySelector('[data-overlay-width-range]'), 18, 1, 100);
+          syncControlPair(row.querySelector('[data-overlay-opacity]'), row.querySelector('[data-overlay-opacity-range]'), 100, 0, 100);
+          syncControlPair(row.querySelector('[data-overlay-x]'), row.querySelector('[data-overlay-x-range]'), 100, 0, 100);
+          syncControlPair(row.querySelector('[data-overlay-y]'), row.querySelector('[data-overlay-y-range]'), 0, 0, 100);
+          updatePreviewOutputs(row);
+        }
+
+        function assetInfoForRow(row) {
+          const fileInput = row ? row.querySelector('[data-overlay-file]') : null;
+          const savedAsset = row ? row.querySelector('input[name="overlay_existing_asset[]"]') : null;
+
+          if (fileInput && fileInput.files && fileInput.files[0]) {
+            const file = fileInput.files[0];
+            const cached = objectUrls.get(fileInput);
+            if (cached && cached.file !== file) {
+              URL.revokeObjectURL(cached.url);
+              objectUrls.delete(fileInput);
+            }
+            if (!objectUrls.has(fileInput)) {
+              objectUrls.set(fileInput, { file, url: URL.createObjectURL(file) });
+            }
+            const item = objectUrls.get(fileInput);
+            const kind = assetKindFromName(file.name, row.dataset.assetKind);
+            row.dataset.assetKind = kind;
+            return { url: item.url, kind, name: file.name, isLocalSelection: true };
+          }
+
+          const name = savedAsset && savedAsset.value ? savedAsset.value : '';
+          const url = row ? row.dataset.assetUrl || '' : '';
+          const kind = assetKindFromName(name || url, row ? row.dataset.assetKind : '');
+          return { url, kind, name, isLocalSelection: false };
+        }
+
+        function revokePreviewUrl(fileInput) {
+          if (!fileInput || !objectUrls.has(fileInput)) return;
+          URL.revokeObjectURL(objectUrls.get(fileInput).url);
+          objectUrls.delete(fileInput);
+        }
+
+        function clearPreview(message) {
+          if (realLayer) {
+            realLayer.innerHTML = '';
+            realLayer.hidden = true;
+            realLayer.classList.remove('is-full-frame', 'is-dragging');
+            realLayer.removeAttribute('style');
+          }
+          if (previewEmpty) {
+            previewEmpty.textContent = message || 'Selecione um arquivo visual em um elemento para pré-visualizar.';
+            previewEmpty.hidden = false;
+          }
+        }
+
+        function previewPosition(row) {
+          const positionSelect = row ? row.querySelector('[data-overlay-position]') : null;
+          return positionSelect ? positionSelect.value : 'top_right';
+        }
+
+        function applyPreviewGeometry(row) {
+          if (!previewStage || !realLayer || !row || row !== activePreviewRow || realLayer.hidden) return;
+          syncPreviewControls(row);
+
+          const position = previewPosition(row);
+          const opacity = readNumber(row.querySelector('[data-overlay-opacity]'), 100, 0, 100) / 100;
+          const media = realLayer.firstElementChild;
+
+          previewStage.dataset.position = position;
+          realLayer.style.opacity = String(opacity);
+
+          if (position === 'full_frame') {
+            realLayer.classList.add('is-full-frame');
+            realLayer.style.left = '0';
+            realLayer.style.top = '0';
+            realLayer.style.width = '100%';
+            realLayer.style.height = '100%';
+            if (media) {
+              media.style.width = '100%';
+              media.style.height = '100%';
+              media.style.objectFit = 'contain';
+            }
+            return;
+          }
+
+          realLayer.classList.remove('is-full-frame');
+          const widthPercent = readNumber(row.querySelector('[data-overlay-width]'), 18, 1, 100);
+          const xPercent = readNumber(row.querySelector('[data-overlay-x]'), 100, 0, 100) / 100;
+          const yPercent = readNumber(row.querySelector('[data-overlay-y]'), 0, 0, 100) / 100;
+          const stageRect = previewStage.getBoundingClientRect();
+          const layerWidth = Math.max(2, stageRect.width * (widthPercent / 100));
+
+          let aspectRatio = 0;
+          if (media && media.tagName === 'IMG' && media.naturalWidth > 0) {
+            aspectRatio = media.naturalHeight / media.naturalWidth;
+          } else if (media && media.tagName === 'VIDEO' && media.videoWidth > 0) {
+            aspectRatio = media.videoHeight / media.videoWidth;
+          }
+          const layerHeight = aspectRatio > 0 ? layerWidth * aspectRatio : realLayer.getBoundingClientRect().height || stageRect.height * 0.2;
+          const left = Math.max(0, (stageRect.width - layerWidth) * xPercent);
+          const top = Math.max(0, (stageRect.height - layerHeight) * yPercent);
+
+          realLayer.style.left = `${left}px`;
+          realLayer.style.top = `${top}px`;
+          realLayer.style.width = `${layerWidth}px`;
+          realLayer.style.height = 'auto';
+          if (media) {
+            media.style.width = '100%';
+            media.style.height = 'auto';
+            media.style.objectFit = 'contain';
+          }
+        }
+
+        function renderPreviewForRow(row) {
+          if (!row) {
+            activePreviewRow = null;
+            clearPreview();
+            return;
+          }
+
+          activePreviewRow = row;
+          overlayRows().forEach((item) => item.classList.toggle('is-previewing', item === row));
+
+          const asset = assetInfoForRow(row);
+          if (!asset.url) {
+            clearPreview('Selecione um arquivo visual neste elemento para pré-visualizar.');
+            if (previewStage) previewStage.dataset.position = previewPosition(row);
+            return;
+          }
+
+          if (!realLayer) return;
+          realLayer.innerHTML = '';
+          realLayer.hidden = false;
+          if (previewEmpty) previewEmpty.hidden = true;
+
+          const media = document.createElement(asset.kind === 'video' ? 'video' : 'img');
+          media.src = asset.url;
+          media.dataset.previewMedia = 'true';
+
+          if (asset.kind === 'video') {
+            media.muted = true;
+            media.autoplay = true;
+            media.loop = true;
+            media.playsInline = true;
+            media.setAttribute('playsinline', '');
+            media.addEventListener('loadedmetadata', () => applyPreviewGeometry(row));
+            media.addEventListener('loadeddata', () => {
+              applyPreviewGeometry(row);
+              media.play().catch(() => {});
+            });
+            media.addEventListener('error', () => {
+              if (row === activePreviewRow) {
+                clearPreview('O navegador não conseguiu tocar este asset no preview, mas o render local por FFmpeg ainda pode processar o arquivo se ele for válido.');
+              }
+            });
+          } else {
+            media.alt = asset.name || 'Elemento visual';
+            media.addEventListener('load', () => applyPreviewGeometry(row));
+            media.addEventListener('error', () => {
+              if (row === activePreviewRow) clearPreview('Não consegui carregar este asset no preview.');
+            });
+          }
+
+          realLayer.appendChild(media);
+          applyPreviewGeometry(row);
+        }
+
+        function setActivePreviewRow(row, shouldOpen) {
+          if (!row) return;
+          if (shouldOpen) row.open = true;
+          if (activePreviewRow === row && realLayer && !realLayer.hidden && realLayer.firstElementChild) {
+            overlayRows().forEach((item) => item.classList.toggle('is-previewing', item === row));
+            applyPreviewGeometry(row);
+            return;
+          }
+          renderPreviewForRow(row);
+        }
+
+        function applyQuickPosition(row) {
+          if (!row) return;
+          const preset = quickPositions[previewPosition(row)];
+          if (!preset) return;
+          setControlValue(row.querySelector('[data-overlay-x]'), preset.x);
+          setControlValue(row.querySelector('[data-overlay-x-range]'), preset.x);
+          setControlValue(row.querySelector('[data-overlay-y]'), preset.y);
+          setControlValue(row.querySelector('[data-overlay-y-range]'), preset.y);
+          if (typeof preset.width === 'number') {
+            setControlValue(row.querySelector('[data-overlay-width]'), preset.width);
+            setControlValue(row.querySelector('[data-overlay-width-range]'), preset.width);
+          }
+          updatePreviewOutputs(row);
+        }
+
+        function setPositionControls(row, xValue, yValue) {
+          if (!row) return;
+          const x = clampPercent(xValue);
+          const y = clampPercent(yValue);
+          setControlValue(row.querySelector('[data-overlay-x]'), x);
+          setControlValue(row.querySelector('[data-overlay-x-range]'), x);
+          setControlValue(row.querySelector('[data-overlay-y]'), y);
+          setControlValue(row.querySelector('[data-overlay-y-range]'), y);
+          updatePreviewOutputs(row);
+        }
+
+        function moveActiveElementToPointer(event) {
+          if (!dragState || !previewStage || !realLayer || !dragState.row) return;
+          const stageRect = previewStage.getBoundingClientRect();
+          const layerRect = realLayer.getBoundingClientRect();
+          const availableWidth = Math.max(1, stageRect.width - layerRect.width);
+          const availableHeight = Math.max(1, stageRect.height - layerRect.height);
+          const x = ((event.clientX - stageRect.left - dragState.offsetX) / availableWidth) * 100;
+          const y = ((event.clientY - stageRect.top - dragState.offsetY) / availableHeight) * 100;
+          setPositionControls(dragState.row, x, y);
+          applyPreviewGeometry(dragState.row);
+        }
+
+        function setupOverlayDragging() {
+          if (!realLayer) return;
+          const beginDrag = (event, pointerId) => {
+            if (!activePreviewRow || realLayer.hidden || previewPosition(activePreviewRow) === 'full_frame') return;
+            const layerRect = realLayer.getBoundingClientRect();
+            dragState = {
+              row: activePreviewRow,
+              pointerId,
+              offsetX: event.clientX - layerRect.left,
+              offsetY: event.clientY - layerRect.top
+            };
+            realLayer.classList.add('is-dragging');
+            if (pointerId != null && realLayer.setPointerCapture) {
+              realLayer.setPointerCapture(pointerId);
+            }
+            event.preventDefault();
+          };
+
+          realLayer.addEventListener('pointerdown', (event) => {
+            beginDrag(event, event.pointerId);
+          });
+          realLayer.addEventListener('mousedown', (event) => {
+            if (dragState) return;
+            beginDrag(event, null);
+          });
+          realLayer.addEventListener('pointermove', (event) => {
+            if (!dragState || dragState.pointerId !== event.pointerId) return;
+            moveActiveElementToPointer(event);
+          });
+          document.addEventListener('mousemove', (event) => {
+            if (!dragState) return;
+            moveActiveElementToPointer(event);
+          });
+          const finishDrag = (event) => {
+            if (!dragState) return;
+            if (dragState.pointerId != null && event.pointerId != null && dragState.pointerId !== event.pointerId) return;
+            moveActiveElementToPointer(event);
+            realLayer.classList.remove('is-dragging');
+            if (dragState.pointerId != null && realLayer.releasePointerCapture) {
+              try {
+                realLayer.releasePointerCapture(dragState.pointerId);
+              } catch (error) {}
+            }
+            dragState = null;
+          };
+          realLayer.addEventListener('pointerup', finishDrag);
+          realLayer.addEventListener('pointercancel', finishDrag);
+          realLayer.addEventListener('lostpointercapture', () => {
+            realLayer.classList.remove('is-dragging');
+            dragState = null;
+          });
+          document.addEventListener('mouseup', finishDrag);
+        }
+
+        function applySavedElements(elements) {
+          if (!Array.isArray(elements)) return;
+          const savedById = new Map(elements.map((item) => [String(item.id || ''), item]));
+          overlayRows().forEach((row) => {
+            const idInput = row.querySelector('[data-overlay-id]');
+            const saved = savedById.get(idInput ? idInput.value : '');
+            if (!saved) return;
+
+            const existingAsset = row.querySelector('input[name="overlay_existing_asset[]"]');
+            const fileInput = row.querySelector('[data-overlay-file]');
+            const selectedFile = row.querySelector('[data-overlay-selected-file]');
+
+            if (existingAsset) existingAsset.value = saved.asset_filename || '';
+            row.dataset.assetUrl = saved.asset_url || '';
+            row.dataset.assetKind = saved.asset_kind || assetKindFromName(saved.asset_filename || saved.asset_url, row.dataset.assetKind);
+
+            if (fileInput && fileInput.files && fileInput.files.length > 0) {
+              revokePreviewUrl(fileInput);
+              fileInput.value = '';
+            }
+            if (selectedFile) selectedFile.textContent = saved.asset_filename || 'Nenhum asset salvo';
+            updateRowSummary(row);
+          });
+          if (activePreviewRow) renderPreviewForRow(activePreviewRow);
+        }
+
+        function updateRowSummary(row) {
+          if (!row) return;
+          const enabled = row.querySelector('[data-overlay-enabled]');
+          const nameInput = row.querySelector('[data-overlay-name]');
+          const fileInput = row.querySelector('[data-overlay-file]');
+          const savedAsset = row.querySelector('input[name="overlay_existing_asset[]"]');
+          const schedule = row.querySelector('[data-overlay-schedule]');
+          const layer = row.querySelector('[data-overlay-layer]');
+          const queueOrder = row.querySelector('[data-overlay-queue-order]');
+          const title = row.querySelector('[data-overlay-summary-name]');
+          const meta = row.querySelector('[data-overlay-summary-meta]');
+          const status = row.querySelector('[data-overlay-status]');
+          const selectedFile = row.querySelector('[data-overlay-selected-file]');
+          const displayName = (nameInput && nameInput.value.trim()) || 'Elemento visual';
+          const fileName = fileInput && fileInput.files && fileInput.files[0]
+            ? fileInput.files[0].name
+            : (savedAsset && savedAsset.value) || 'Sem asset selecionado';
+          const scheduleText = scheduleLabels[schedule ? schedule.value : 'full_video'] || 'Agenda';
+          const queueText = schedule && schedule.value === 'queue_equal' && queueOrder ? `fila ${queueOrder.value || '1'}` : null;
+          const layerText = layer ? `camada ${layer.value || '1'}` : null;
+          const metaParts = [fileName, scheduleText, queueText, layerText].filter(Boolean);
+
+          row.classList.toggle('is-active', Boolean(enabled && enabled.checked));
+          if (title) title.textContent = displayName;
+          if (meta) meta.textContent = metaParts.join(' · ');
+          if (selectedFile && fileInput && fileInput.files && fileInput.files[0]) {
+            selectedFile.textContent = fileInput.files[0].name;
+          }
+          if (status && fileInput && fileInput.files && fileInput.files[0]) {
+            status.textContent = 'Selecionado';
+            status.className = 'status-tag is-pending';
+          }
+        }
+
+        function refreshListState() {
+          const rows = overlayRows();
+          rows.forEach((row, index) => {
+            const number = row.querySelector('[data-overlay-number]');
+            const idInput = row.querySelector('[data-overlay-id]');
+            const enabled = row.querySelector('[data-overlay-enabled]');
+            const fileInput = row.querySelector('[data-overlay-file]');
+            if (number) number.textContent = String(index + 1);
+            if (fileInput) fileInput.name = `overlay_asset_${index}`;
+            if (idInput && !idInput.value) idInput.value = `element_${Date.now()}_${index + 1}`;
+            if (enabled && idInput) enabled.value = idInput.value;
+            syncPreviewControls(row);
+            updateRowSummary(row);
+          });
+
+          if (countBadge) countBadge.textContent = `${rows.length} elemento(s)`;
+          if (emptyState) emptyState.hidden = rows.length !== 0;
+          if (overlayList) overlayList.dataset.nextIndex = String(rows.length);
+        }
+
+        function bindRow(row) {
+          if (!row || row.dataset.bound === 'true') return;
+          row.dataset.bound = 'true';
+
+          row.addEventListener('click', (event) => {
+            if (event.target.closest('[data-overlay-remove]')) return;
+            setActivePreviewRow(row);
+          });
+
+          row.addEventListener('toggle', () => {
+            if (row.open) {
+              overlayRows().forEach((item) => {
+                if (item !== row) item.open = false;
+              });
+              setActivePreviewRow(row);
+            }
+          });
+
+          row.querySelectorAll('[data-overlay-name], [data-overlay-schedule], [data-overlay-enabled], [data-overlay-layer], [data-overlay-queue-order]').forEach((control) => {
+            control.addEventListener('input', () => updateRowSummary(row));
+            control.addEventListener('change', () => updateRowSummary(row));
+          });
+
+          row.querySelectorAll('[data-overlay-position]').forEach((positionSelect) => {
+            positionSelect.addEventListener('change', () => {
+              applyQuickPosition(row);
+              updateRowSummary(row);
+              setActivePreviewRow(row);
+            });
+          });
+
+          [
+            ['[data-overlay-width]', '[data-overlay-width-range]'],
+            ['[data-overlay-opacity]', '[data-overlay-opacity-range]'],
+            ['[data-overlay-x]', '[data-overlay-x-range]'],
+            ['[data-overlay-y]', '[data-overlay-y-range]']
+          ].forEach(([numberSelector, rangeSelector]) => {
+            const numberControl = row.querySelector(numberSelector);
+            const rangeControl = row.querySelector(rangeSelector);
+            if (numberControl) {
+              numberControl.addEventListener('input', () => {
+                if (rangeControl) rangeControl.value = numberControl.value;
+                updatePreviewOutputs(row);
+                setActivePreviewRow(row);
+              });
+              numberControl.addEventListener('change', () => {
+                syncPreviewControls(row);
+                setActivePreviewRow(row);
+              });
+            }
+            if (rangeControl) {
+              rangeControl.addEventListener('input', () => {
+                if (numberControl) numberControl.value = rangeControl.value;
+                updatePreviewOutputs(row);
+                setActivePreviewRow(row);
+              });
+              rangeControl.addEventListener('change', () => {
+                syncPreviewControls(row);
+                setActivePreviewRow(row);
+              });
+            }
+          });
+
+          const fileInput = row.querySelector('[data-overlay-file]');
+          const selectedFile = row ? row.querySelector('[data-overlay-selected-file]') : null;
+          if (fileInput) {
+            fileInput.addEventListener('change', () => {
+              if (!fileInput.files || !fileInput.files[0]) {
+                revokePreviewUrl(fileInput);
+              }
+              if (selectedFile && fileInput.files && fileInput.files[0]) {
+                selectedFile.textContent = fileInput.files[0].name;
+              }
+              if (fileInput.files && fileInput.files[0]) {
+                row.dataset.assetKind = assetKindFromName(fileInput.files[0].name, row.dataset.assetKind);
+              }
+              updateRowSummary(row);
+              setActivePreviewRow(row, true);
+            });
+          }
+
+          const removeButton = row.querySelector('[data-overlay-remove]');
+          if (removeButton) {
+            removeButton.addEventListener('click', () => {
+              revokePreviewUrl(fileInput);
+              const wasActive = activePreviewRow === row;
+              row.remove();
+              refreshListState();
+              if (wasActive) {
+                const nextRow = overlayRows()[0];
+                if (nextRow) setActivePreviewRow(nextRow);
+                else clearPreview();
+              }
+            });
+          }
+
+          syncPreviewControls(row);
+          updateRowSummary(row);
+        }
+
+        function addOverlayRow() {
+          if (!overlayList || !overlayTemplate) return;
+          const number = overlayRows().length + 1;
+          const zeroIndex = number - 1;
+          const id = `element_${Date.now()}_${number}`;
+          const wrapper = document.createElement('div');
+          wrapper.innerHTML = overlayTemplate.innerHTML
+            .replaceAll('__NUMBER__', String(number))
+            .replaceAll('__ZERO__', String(zeroIndex))
+            .replaceAll('__ID__', id)
+            .trim();
+          const row = wrapper.firstElementChild;
+          overlayList.appendChild(row);
+          bindRow(row);
+          refreshListState();
+          setActivePreviewRow(row, true);
+        }
+
+        overlayRows().forEach(bindRow);
+        refreshListState();
+        setupOverlayDragging();
+        const initialPreviewRow = overlayRows().find((row) => assetInfoForRow(row).url) || overlayRows()[0];
+        if (initialPreviewRow) setActivePreviewRow(initialPreviewRow);
+
+        if (addButton) {
+          addButton.addEventListener('click', addOverlayRow);
+        }
+
+        if (overlayForm) {
+          overlayForm.addEventListener('submit', () => {
+            refreshListState();
+          }, true);
+        }
+
+        window.addEventListener('resize', () => applyPreviewGeometry(activePreviewRow));
+
+        if (saveButton && overlayForm) {
+          saveButton.addEventListener('click', async () => {
+            const originalText = saveButton.textContent;
+            saveButton.disabled = true;
+            saveButton.textContent = 'Salvando...';
+            if (saveStatus) saveStatus.hidden = true;
+            refreshListState();
+            try {
+              const response = await fetch(overlayForm.dataset.saveUrl, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                body: new FormData(overlayForm)
+              });
+              const data = await response.json();
+              if (!response.ok || !data.ok) throw new Error(data.message || 'Falha ao salvar composição.');
+              applySavedElements(data.elements);
+              if (saveStatus) {
+                saveStatus.classList.remove('status-error');
+                saveStatus.classList.add('status-ok');
+                saveStatus.textContent = data.message || 'Composição salva.';
+                saveStatus.hidden = false;
+              }
+            } catch (error) {
+              if (saveStatus) {
+                saveStatus.textContent = String(error.message || error);
+                saveStatus.hidden = false;
+                saveStatus.classList.remove('status-ok');
+                saveStatus.classList.add('status-error');
+              } else {
+                alert(String(error.message || error));
+              }
+            } finally {
+              saveButton.disabled = false;
+              saveButton.textContent = originalText;
+            }
+          });
+        }
+      })();
+    </script>
+
+  {% elif metadata.get("task_type", "ai_cuts") == "video_splitter" %}
   {% set split_mode = metadata.get("split_mode", "fixed_duration") %}
   {% set split_duration = metadata.get("split_duration_seconds", "60") %}
   {% set split_parts = metadata.get("split_parts", "3") %}
